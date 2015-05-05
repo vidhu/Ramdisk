@@ -4,6 +4,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #define RD_CREAT _IOR('G', 0, char *)
 #define RD_MKDIR _IOR('G', 1, char *)
@@ -36,21 +37,45 @@ int main(){
 	//ioctl(fd, RD_MKDIR, "/dir1/dir2");
 	//ioctl(fd, RD_CREAT, "/dir1/dir2/file1");
 	ioctl(fd, RD_MKDIR, "/dir1");
-    ioctl(fd, RD_MKDIR, "/dir1/dir2");
-    ioctl(fd, RD_CREAT, "/dir1/dir2/file1");    
+    ioctl(fd, RD_MKDIR, "/dir1/dir2_0");
+    ioctl(fd, RD_MKDIR, "/dir1/dir2_1");
+    ioctl(fd, RD_MKDIR, "/dir1/dir2_2");
+    ioctl(fd, RD_MKDIR, "/dir1/dir2_3");   
+    ioctl(fd, RD_MKDIR, "/dir1/dir2_4");   
+    ioctl(fd, RD_MKDIR, "/dir1/dir2_5");   
+    ioctl(fd, RD_MKDIR, "/dir1/dir2_6");
+    //ioctl(fd, RD_CREAT, "/dir1/dir2_2/file1");
+    
+    ioctl(fd, RD_UNLINK, "/dir1/dir2_2");
 
-
-    int rdfd = ioctl(fd, RD_OPEN, "/dir1/dir2/file1");
-    char buf[] = "Hello World!";
+    int rdfd = ioctl(fd, RD_OPEN, "/dir1");
+    char buf[16];
     struct Params write_p;
     write_p.fd = rdfd;
     write_p.addr = buf;
-    write_p.count = sizeof(buf);
-    ioctl(fd, RD_WRITE, &write_p);
-    ioctl(fd, RD_CLOSE, rdfd);
+    write_p.count = 16;
+
+    for(int i=0; i<8; i++){
+	    if(ioctl(fd, RD_READDIR, &write_p) == 0)
+	    	break;
+	    char *filename = buf;
+	    int16_t inode_num = *(buf + 14);
+	    printf("File: %.14s  Inode: %d\n", filename, inode_num);
+    }
+
+
+
+    //int rdfd = ioctl(fd, RD_OPEN, "/dir1/dir2_2/file1");
+    //char buf[] = "Hello World!";
+    //struct Params write_p;
+    //write_p.fd = rdfd;
+    //write_p.addr = buf;
+    //write_p.count = sizeof(buf);
+    //ioctl(fd, RD_WRITE, &write_p);
+    //ioctl(fd, RD_CLOSE, rdfd);
     
-	ioctl(fd, RD_UNLINK, "/dir1/dir2/file1");
-    ioctl(fd, RD_CREAT, "/dir1/dir2/file1");   
+	//ioctl(fd, RD_UNLINK, "/dir1/dir2_2/file1");
+    //ioctl(fd, RD_CREAT, "/dir1/dir2_2/file1");   
     /**
     char *buf2 = malloc(sizeof(buf));
     struct Params read_p;
@@ -73,5 +98,11 @@ int main(){
     ioctl(fd, RD_READ, &read_p2);
     printf("===> %s <===\n", buf3);
 	**/
+
+    if ((fd = close(fd)) < 0) {
+        perror("close");
+        return -1;
+    }
+
     return 0;
 }

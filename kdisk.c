@@ -92,13 +92,27 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 			copy_from_user(&params, (struct Params*)arg, sizeof(struct Params));
 			result = rd_lseek(params.fd, params.count);
 			break;
-
 		case RD_UNLINK:
 			//Get absolute directory path
 			size = strnlen_user((char *) arg, 64);
 			pathname = (char *)kmalloc(size, GFP_KERNEL);
 			copy_from_user(pathname, (char *)arg, size);
 			result = rd_unlink(pathname);
+			break;
+		case RD_READDIR:
+			//Get params
+			copy_from_user(&params, (struct Params*)arg, sizeof(struct Params));
+
+			//Allocate space to read data
+			data_address = (char *) kmalloc(16, GFP_KERNEL);
+
+			//Read data
+			result = rd_readdir(params.fd, data_address);
+
+			//Copy to user space
+			copy_to_user(params.addr, data_address, 16);
+
+			break;
 		default:
 			return -ENOTTY;
 	}
@@ -351,6 +365,37 @@ int rd_unlink(char *pathname){
 	delete_Inode(parent_inode, file_inode);
 
 	printk("=================================\n");
+	return 0;
+}
+
+int rd_readdir(int fd, char *address){
+	printk("==RD_READDIR=====================\n");
+	printk("Reading entries in inode '%d'\n", fd);
+
+	if(fd_table[fd] == NULL)
+		return -1;
+
+	printk("Dir is open\n");
+	struct Inode *inode = fd_table[fd]->inode;
+
+	int block_num_start = (fd_table[fd]->position) / 16;
+	int dir_num_start = (fd_table[fd]->position) % 16;
+
+	for(int i=block_num_start; i<8; i++){
+		if(inode->location[i] == 0)
+			continue;
+		printk("Reading entry in inode block location '%d'\n", i);
+		for(int j=dir_num_start; j<16; j++){
+			fd_table[fd]->position++;
+			if(inode->location[i]->dir.entry[j].filename[0] == 0)
+				continue;
+			printk("Found entry: %.14s\n", inode->location[i]->dir.entry[j].filename);
+			strncpy(address, inode->location[i]->dir.entry[j].filename, 16);
+			memcpy(address+14, &(inode->location[i]->dir.entry[j].inode_number), 2);
+			return 1;
+		}
+	}
+	
 	return 0;
 }
 
