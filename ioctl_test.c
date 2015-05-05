@@ -35,24 +35,35 @@ int main(){
 	int rdfd = ioctl(fd, RD_OPEN, "/dir1/dir2/file1");
 
     
-    char *buf = malloc(260);
-    memset(buf, '\0', 260);
-    memset(buf, 'a', 259);
+    char buf[] = "Hello World!";
 
     struct Params write_p;
     write_p.fd = rdfd;
     write_p.addr = buf;
-    write_p.count = 260;
+    write_p.count = sizeof(buf);
     ioctl(fd, RD_WRITE, &write_p);
     
-    char *buf2 = malloc(260);
+
+    char *buf2 = malloc(sizeof(buf));
     struct Params read_p;
     read_p.fd = rdfd;
     read_p.addr = buf2;
-    read_p.count = 260;
+    read_p.count = sizeof(buf);
     ioctl(fd, RD_READ, &read_p);
+    printf("===> %s <===\n", buf2);
 
-    printf("===> %s\n <===", buf2);
+    struct Params lseek;
+    lseek.fd = rdfd;
+    lseek.count = 3;
+    ioctl(fd, RD_LSEEK, &lseek);
+
+    char *buf3 = malloc(sizeof(buf));
+    struct Params read_p2;
+    read_p2.fd = rdfd;
+    read_p2.addr = buf3;
+    read_p2.count = 5;
+    ioctl(fd, RD_READ, &read_p2);
+    printf("===> %s <===\n", buf3);
 
     return 0;
 }

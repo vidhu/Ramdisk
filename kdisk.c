@@ -16,7 +16,7 @@ struct FileDesc *fd_table[1024];
 struct Ramdisk *disk;
 
 static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
-	int result;
+	int result = 0;
 	int size;
 	char *pathname;
 
@@ -86,6 +86,11 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 			}
 			printk("RD_Write successfull\n");
 
+			break;
+		case RD_LSEEK:
+			//Get params
+			copy_from_user(&params, (struct Params*)arg, sizeof(struct Params));
+			result = rd_lseek(params.fd, params.count);
 			break;
 		default:
 			return -ENOTTY;
@@ -167,8 +172,7 @@ int rd_open(char *pathname){
 
 	//Create new file Descriptor
 	struct FileDesc* fd = (struct FileDesc*) kmalloc(sizeof(struct FileDesc), GFP_KERNEL);
-	fd->read_pos = 0;
-	fd->write_pos = 0;
+	fd->position = 0;
 	fd->inode = &(disk->inode[inode_index]);
 
 	//Insert file descriptor into fd table
@@ -204,26 +208,50 @@ int rd_read(int fd, char *address, int num_bytes){
 	printk("Need to read '%d bytes' from inode '%d' into address: 0x%p\n", num_bytes, fd, address);
 	
 	int bytes_read = 0;
+	int *fd_position = &(fd_table[fd]->position);
+	printk("fd_table[%d]->position is: %d\n", fd, fd_table[fd]->position);
 
 	struct Inode *inode = &disk->inode[fd];
 	
-	for(int i=0; i<8; i++){
+	//Return if file descriptor position os greater than file size
+	if(inode->size >= *fd_position)
+		return 0;
+
+	//Calculate position to start reading from
+	int inode_block_num = (*fd_position)/256;
+	int inode_block_offset = (*fd_position) % 256;
+
+	//Start reading from calculated of set
+	for(int i=inode_block_num; i<8; i++){
 		//Check if block is allocated or not. If not, then there is no content
 		if(inode->location[i] == NULL)
 			return -1;
 
 		union Block *b = inode->location[i];
 		printk("Reading data from inode.location[%d] at addr: %p\n", i, b);
-		for(int j=0; j<256; j++){
-			printk("\tReading char: %c\n", b->file.byte[j]);
-			address[(256*i)+j] = b->file.byte[j];
-			bytes_read++;
+		for(int j=inode_block_offset; j<256; j++){
 
-			if(bytes_read == num_bytes){
+			//Debuging
+			printk("\tReading char: %c\n", b->file.byte[j]);
+
+			//Read data
+			address[(256*i)+j] = b->file.byte[j];
+
+			//Update fd and byte count
+			bytes_read++;
+			(*fd_position)++;
+
+			//Return if read num_bytes or reached end of file
+			if((bytes_read == num_bytes) || (*fd_position) == inode->size){
+				//Reset fd->position
+				(*fd_position) = 0;
+
 				printk("Bytes read: %d\n", bytes_read);
 				printk("=================================\n");
 				return bytes_read;
 			}
+
+
 		}
 	}
 	
@@ -236,6 +264,7 @@ int rd_write(int fd, char *address, int num_bytes){
 	printk("Address '0x%p' contains: %s\n", address, address);
 
 	int bytes_written = 0;
+	int *fd_position = &(fd_table[fd]->position);
 
 	struct Inode *inode = &disk->inode[fd];
 	for(int i=0; i<8; i++){
@@ -245,19 +274,39 @@ int rd_write(int fd, char *address, int num_bytes){
 
 		printk("Writting data to inode.location[%d] at addr: %p\n", i, inode->location[i]);
 		for(int j=0; j<256; j++){
+
+			//Debugging
 			printk("\tWritting char: %c\n", address[(256*i)+j]);
+
+			//Write data
 			inode->location[i]->file.byte[j] = address[(256*i)+j];
+
+			//Increament file size
+			inode->size++;
+
+			//Update fd
 			bytes_written++;
+			(*fd_position)++;
 
 			if(bytes_written == num_bytes){
+				//Reset fd->position
+				(*fd_position) = 0;
+
 				printk("Bytes Written: %d\n", bytes_written);
 				printk("=================================\n");
 				return bytes_written;
 			}
+
 		}
 	}
 
 	return -1;
+}
+
+int rd_lseek(int fd, int offset){
+	printk("Moving fd_table[%d]->position to %d\n",fd, offset);
+	fd_table[fd]->position += offset;
+	return 0;
 }
 
 //Returns an array of 2 string containing the parent directory
