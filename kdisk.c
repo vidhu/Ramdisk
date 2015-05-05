@@ -92,6 +92,13 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 			copy_from_user(&params, (struct Params*)arg, sizeof(struct Params));
 			result = rd_lseek(params.fd, params.count);
 			break;
+
+		case RD_UNLINK:
+			//Get absolute directory path
+			size = strnlen_user((char *) arg, 64);
+			pathname = (char *)kmalloc(size, GFP_KERNEL);
+			copy_from_user(pathname, (char *)arg, size);
+			result = rd_unlink(pathname);
 		default:
 			return -ENOTTY;
 	}
@@ -309,6 +316,44 @@ int rd_lseek(int fd, int offset){
 	return 0;
 }
 
+int rd_unlink(char *pathname){
+	printk("==RD_UNLINK======================\n");
+	printk("Unlinking file/dir: %s\n", pathname);
+
+	//Get inodes for the given pathname and its parent
+	char **data = parse_path(pathname);
+	int parent_inode = get_inode_number(data[1]);
+	int file_inode = get_inode_number(pathname);
+
+	printk("Path to delete has inode index: %d\n", file_inode);
+	//Error checking
+	//Does it exist?
+	if(file_inode == -1)
+		return -1;
+	if(file_inode == 0)
+		return -1;
+	//Does the dir contain files?
+	if(strcmp(disk->inode[file_inode].type, "dir") == 0
+		&& disk->inode[file_inode].location[0] != NULL)
+		return -1;
+	//Is this file open?
+	if(strcmp(disk->inode[file_inode].type, "reg") == 0
+		&& fd_table[file_inode] != NULL)
+		return -1;
+	printk("Path pass all error checks\n");
+
+	//Delete blocks accociated to the path's inode
+	struct Inode *inode = &(disk->inode[file_inode]);
+	delete_blocks(inode);
+
+	//Delete file/dir inodes
+	
+	delete_Inode(parent_inode, file_inode);
+
+	printk("=================================\n");
+	return 0;
+}
+
 //Returns an array of 2 string containing the parent directory
 //and end file. Example: char *pathname = "/dir1/dir2/file1"
 //will return; parent: `/dir1/dir2`, child: `file1`
@@ -350,6 +395,7 @@ int find_free_inode(){
 
 //Returns the inode index of the provided path
 int get_inode_number(char* pathname){
+	printk("\t\tGetting inode for: %s\n", pathname);
 	if(pathname[0] != '/')
 		return -1;
 	if(strlen(pathname) == 1)
@@ -362,7 +408,7 @@ int get_inode_number(char* pathname){
   	char *token, *strpos = pathname;
   	while ((token=strsep(&strpos,"/")) != NULL){
     	nodeIndex = get_inode_number_helper(nodeIndex, token);
-    	printk("Node Index for '%s': %d\n", pathname ,nodeIndex);
+    	printk("\t\tNode Index for '%s': %d\n", token ,nodeIndex);
   	}
   	
 
@@ -372,7 +418,7 @@ int get_inode_number(char* pathname){
 //returns the inode of dir_name if it is present in inode
 //of the given index
 int get_inode_number_helper(int index, char *dir_name){
-	printk("Need to look for '%s' in inode '%d'\n", dir_name, index);
+	printk("\t\tNeed to look for '%s' in inode '%d'\n", dir_name, index);
 	if(dir_name[0] == '/')
 		return 0;
 
@@ -401,7 +447,7 @@ int get_inode_number_helper(int index, char *dir_name){
 //if 	child  		 = 124 which links to (file1)
 //then the following struction is formed /dir1/dir2/dir3/file1
 int insert_Inode(int parent, int child, char *fileName){
-	printk("Inserting '%s' at inode %d in parent with inode %d\n", fileName, child, parent);
+	printk("\t\tInserting '%s' at inode %d in parent with inode %d\n", fileName, child, parent);
 
 	union Block *b;
 	for(int i=0;i<8;i++){
@@ -424,6 +470,27 @@ int insert_Inode(int parent, int child, char *fileName){
 	return -1;
 }
 
+int delete_Inode(int parent, int child){
+	printk("\t\tDeleting inode '%d' in parent with inode %d\n",child, parent);
+
+	union Block *b;
+	for(int i=0; i<8; i++){
+		b = disk->inode[parent].location[i];
+		if(b != 0){
+			for(int j=0; j<16; j++){
+				if(b->dir.entry[j].inode_number == child){
+					memset(&(b->dir.entry[j]), 0, 16);
+					disk->superBlock.freeInode++;
+					printk("\t\tDeleted inode\n");
+					return 0;
+				}
+			}
+		}
+	}
+
+	return -1;
+}
+
 //allocates a free block in the disk.
 //Returns the address of the newly allocated block
 union Block* allocate_block(){
@@ -435,6 +502,22 @@ union Block* allocate_block(){
 		}
 	}
 	return NULL;
+}
+
+int delete_blocks(struct Inode *inode){
+	for(int i=0; i<8; i++){
+		//Search block with address *block
+		union Block *block = inode->location[i];
+		for(int j=0; j<7931; j++){
+			if(block == &(disk->part[j])){
+				printk("\t\tDeleting block: %d\n", j);
+				disk->bitmap.map[j / 8] = (disk->bitmap.map[j / 8] | SET_BIT_0(j%8));
+				disk->superBlock.freeblock++;
+				memset(block, 0, 256);
+			}
+		}
+	}
+	return 0;
 }
 
 //Uses the bitmap to check if a block is free is not

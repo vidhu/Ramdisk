@@ -37,19 +37,21 @@ int main(){
 	//ioctl(fd, RD_CREAT, "/dir1/dir2/file1");
 	ioctl(fd, RD_MKDIR, "/dir1");
     ioctl(fd, RD_MKDIR, "/dir1/dir2");
-    ioctl(fd, RD_CREAT, "/dir1/dir2/file1");
-	int rdfd = ioctl(fd, RD_OPEN, "/dir1/dir2/file1");
+    ioctl(fd, RD_CREAT, "/dir1/dir2/file1");    
 
-    
+
+    int rdfd = ioctl(fd, RD_OPEN, "/dir1/dir2/file1");
     char buf[] = "Hello World!";
-
     struct Params write_p;
     write_p.fd = rdfd;
     write_p.addr = buf;
     write_p.count = sizeof(buf);
     ioctl(fd, RD_WRITE, &write_p);
+    ioctl(fd, RD_CLOSE, rdfd);
     
-
+	ioctl(fd, RD_UNLINK, "/dir1/dir2/file1");
+    
+    /**
     char *buf2 = malloc(sizeof(buf));
     struct Params read_p;
     read_p.fd = rdfd;
@@ -70,6 +72,6 @@ int main(){
     read_p2.count = 5;
     ioctl(fd, RD_READ, &read_p2);
     printf("===> %s <===\n", buf3);
-
+	**/
     return 0;
 }
