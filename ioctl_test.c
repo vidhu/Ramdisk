@@ -28,13 +28,7 @@ int main(){
         return -1;
     }
 
-    /**
-    if(ioctl(fd, RD_CREAT, "/file1") < 0)
-        perror("first ioctl");
-	**/
-	//ioctl(fd, RD_MKDIR, "/dir1");
-	//ioctl(fd, RD_MKDIR, "/dir1/dir2");
-	//ioctl(fd, RD_CREAT, "/dir1/dir2/file1");
+
 	ioctl(fd, RD_MKDIR, "/dir1");
     ioctl(fd, RD_MKDIR, "/dir1/dir2");
     ioctl(fd, RD_CREAT, "/dir1/dir2/file1");
