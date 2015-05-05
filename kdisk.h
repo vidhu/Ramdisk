@@ -105,8 +105,7 @@ struct Ramdisk {
 };
 
 struct FileDesc {
-	int read_pos;
-	int write_pos;
+	int position;
 	struct Inode* inode;
 };
 
