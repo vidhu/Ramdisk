@@ -21,27 +21,6 @@
 #define SET_BIT_0(y) (~SET_BIT_1(y))
 //End Macros
 
-//Prototypes
-static long procfile_ioctl(struct file *, unsigned int, unsigned long);
-int rd_creat(char *pathname);
-int rd_mkdir(char *pathname);
-int rd_open(char *pathname);
-int rd_close(int fd);
-int rd_read(int fd, char *address, int num_bytes);
-int rd_write(int fd, char *address, int num_bytes);
-int rd_lseek(int fd, int offset);
-int rd_unlink(char *pathname);
-int rd_readdir(int fd, char *address);
-
-char **parse_path(char *pathname);
-int get_inode_number(char* pathname);
-int get_inode_number_helper(int index, char *dir_name);
-int find_free_inode(void);
-int insert_Inode(int parent, int child, char *fileName);
-union Block* allocate_block(void);
-int isBlockFree(int block);
-//End prototypes
-
 //Ramdisk constants
 #define MAX_FILE_SIZE 	((64*256)+(64*64*256)+256*8)
 #define DISK_SIZE 		2	
@@ -114,4 +93,28 @@ struct Params {
 	char* addr;
 	int count;
 };
+
+
+//Prototypes
+static long procfile_ioctl(struct file *, unsigned int, unsigned long);
+int rd_creat(char *pathname);
+int rd_mkdir(char *pathname);
+int rd_open(char *pathname);
+int rd_close(int fd);
+int rd_read(int fd, char *address, int num_bytes);
+int rd_write(int fd, char *address, int num_bytes);
+int rd_lseek(int fd, int offset);
+int rd_unlink(char *pathname);
+int rd_readdir(int fd, char *address);
+
+char **parse_path(char *pathname);
+int get_inode_number(char* pathname);
+int get_inode_number_helper(int index, char *dir_name);
+int find_free_inode(void);
+int insert_Inode(int parent, int child, char *fileName);
+union Block* allocate_block(void);
+int isBlockFree(int block);
+int delete_blocks(struct Inode *inode);
+int delete_Inode(int parent, int child);
+//End prototypes
 #endif
