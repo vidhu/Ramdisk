@@ -50,7 +50,7 @@ int main(){
     ioctl(fd, RD_CLOSE, rdfd);
     
 	ioctl(fd, RD_UNLINK, "/dir1/dir2/file1");
-    
+    ioctl(fd, RD_CREAT, "/dir1/dir2/file1");   
     /**
     char *buf2 = malloc(sizeof(buf));
     struct Params read_p;

@@ -479,7 +479,8 @@ int delete_Inode(int parent, int child){
 		if(b != 0){
 			for(int j=0; j<16; j++){
 				if(b->dir.entry[j].inode_number == child){
-					memset(&(b->dir.entry[j]), 0, 16);
+					memset(&(b->dir.entry[j]), 0, 16); //remove entry from parent
+					memset(&(disk->inode[child]), 0, 64); //free inode
 					disk->superBlock.freeInode++;
 					printk("\t\tDeleted inode\n");
 					return 0;
