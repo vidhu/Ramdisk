@@ -48,27 +48,49 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 			rd_close((int) arg);
 			break;
 		case RD_READ:
+			//Get params
 			copy_from_user(&params, (struct Params*)arg, sizeof(struct Params));
+
+			//Allocate space to read data
 			data_address = (char *) kmalloc(params.count, GFP_KERNEL);
+
+			//Read data
 			byte_count = rd_read(params.fd, data_address, params.count);
-			if(params.count != byte_count) break;
+
+			//Check if successfull
+			if(params.count != byte_count){
+				result = -1;
+				break;
+			}
+
+			//Copy read data to user space
 			copy_to_user(params.addr, data_address, params.count);
 			printk("RD_Read successfull\n");
 			break;
 		case RD_WRITE:
+			//Get params
 			copy_from_user(&params, (struct Params*)arg, sizeof(struct Params));
+
+			//Get Data to write
 			data_address = (char *) kmalloc(params.count, GFP_KERNEL);
 			copy_from_user(data_address, params.addr, params.count);
 
+			//Write data
 			byte_count = rd_write(params.fd, data_address, params.count);
 			
-			if(params.count != byte_count) break;
+			//Check if successful
+			//Check if successfull
+			if(params.count != byte_count){
+				result = -1;
+				break;
+			}
 			printk("RD_Write successfull\n");
+
 			break;
 		default:
 			return -ENOTTY;
 	}
-	return 0;
+	return result;
 }
 
 int rd_creat(char *pathname){
@@ -181,10 +203,31 @@ int rd_read(int fd, char *address, int num_bytes){
 	printk("==RD_READ========================\n");
 	printk("Need to read '%d bytes' from inode '%d' into address: 0x%p\n", num_bytes, fd, address);
 	
+	int bytes_read = 0;
 
+	struct Inode *inode = &disk->inode[fd];
+	
+	for(int i=0; i<8; i++){
+		//Check if block is allocated or not. If not, then there is no content
+		if(inode->location[i] == NULL)
+			return -1;
 
-	printk("=================================\n");
-	return num_bytes;
+		union Block *b = inode->location[i];
+		printk("Reading data from inode.location[%d] at addr: %p\n", i, b);
+		for(int j=0; j<256; j++){
+			printk("\tReading char: %c\n", b->file.byte[j]);
+			address[j] = b->file.byte[j];
+			bytes_read++;
+
+			if(bytes_read == num_bytes){
+				printk("Bytes read: %d\n", bytes_read);
+				printk("=================================\n");
+				return bytes_read;
+			}
+		}
+	}
+	
+	return -1;
 }
 
 int rd_write(int fd, char *address, int num_bytes){
@@ -194,18 +237,27 @@ int rd_write(int fd, char *address, int num_bytes){
 
 	int bytes_written = 0;
 
-	struct Inode inode = disk->inode[fd];
+	struct Inode *inode = &disk->inode[fd];
 	for(int i=0; i<8; i++){
 		//Check if block is allocated or not. If not, allocate it a block
-		if(inode.location[i] == NULL)
-			inode.location[i] = allocate_block();
-		
-		union Block *b = inode.location[i];
-	}
-	
+		if(inode->location[i] == NULL)
+			inode->location[i] = allocate_block();
 
-	printk("=================================\n");
-	return num_bytes;
+		printk("Writting data to inode.location[%d] at addr: %p\n", i, inode->location[i]);
+		for(int j=0; j<256; j++){
+			printk("\tWritting char: %c\n", address[(256*i)+j]);
+			inode->location[i]->file.byte[j] = address[(256*i)+j];
+			bytes_written++;
+
+			if(bytes_written == num_bytes){
+				printk("Bytes Written: %d\n", bytes_written);
+				printk("=================================\n");
+				return bytes_written;
+			}
+		}
+	}
+
+	return -1;
 }
 
 //Returns an array of 2 string containing the parent directory

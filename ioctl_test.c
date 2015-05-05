@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <fcntl.h>
@@ -38,15 +39,25 @@ int main(){
     ioctl(fd, RD_CREAT, "/file1");
     ioctl(fd, RD_OPEN, "/file1");
 
-    //char *buf = malloc(sizeof(char)*512);
-    char *buf = "Hello World!";
-    struct Params p;
-    p.fd = 1;
-    p.addr = buf;
-    p.count = sizeof(char)*512;
-
-    ioctl(fd, RD_WRITE, &p);
     
+    char *buf = malloc(260);
+    memset(buf, '\0', 260);
+    memset(buf, 'a', 259);
+
+    struct Params write_p;
+    write_p.fd = 1;
+    write_p.addr = buf;
+    write_p.count = 260;
+    ioctl(fd, RD_WRITE, &write_p);
+    
+    char *buf2 = malloc(260);
+    struct Params read_p;
+    read_p.fd = 1;
+    read_p.addr = buf2;
+    read_p.count = 260;
+    ioctl(fd, RD_READ, &read_p);
+
+    printf("===> %s\n <===", buf2);
 
     return 0;
 }
