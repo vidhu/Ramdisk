@@ -45,7 +45,7 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 			result = rd_open(pathname);
 			break;
 		case RD_CLOSE:
-			rd_close((int) arg);
+			result = rd_close((int) arg);
 			break;
 		case RD_READ:
 			//Get params
@@ -216,7 +216,7 @@ int rd_read(int fd, char *address, int num_bytes){
 		printk("Reading data from inode.location[%d] at addr: %p\n", i, b);
 		for(int j=0; j<256; j++){
 			printk("\tReading char: %c\n", b->file.byte[j]);
-			address[j] = b->file.byte[j];
+			address[(256*i)+j] = b->file.byte[j];
 			bytes_read++;
 
 			if(bytes_read == num_bytes){

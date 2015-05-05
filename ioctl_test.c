@@ -35,9 +35,10 @@ int main(){
 	//ioctl(fd, RD_MKDIR, "/dir1");
 	//ioctl(fd, RD_MKDIR, "/dir1/dir2");
 	//ioctl(fd, RD_CREAT, "/dir1/dir2/file1");
-    
-    ioctl(fd, RD_CREAT, "/file1");
-    ioctl(fd, RD_OPEN, "/file1");
+	ioctl(fd, RD_MKDIR, "/dir1");
+    ioctl(fd, RD_MKDIR, "/dir1/dir2");
+    ioctl(fd, RD_CREAT, "/dir1/dir2/file1");
+	int rdfd = ioctl(fd, RD_OPEN, "/dir1/dir2/file1");
 
     
     char *buf = malloc(260);
@@ -45,14 +46,14 @@ int main(){
     memset(buf, 'a', 259);
 
     struct Params write_p;
-    write_p.fd = 1;
+    write_p.fd = rdfd;
     write_p.addr = buf;
     write_p.count = 260;
     ioctl(fd, RD_WRITE, &write_p);
     
     char *buf2 = malloc(260);
     struct Params read_p;
-    read_p.fd = 1;
+    read_p.fd = rdfd;
     read_p.addr = buf2;
     read_p.count = 260;
     ioctl(fd, RD_READ, &read_p);
