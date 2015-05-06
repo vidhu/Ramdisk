@@ -16,6 +16,8 @@
 #define RD_UNLINK _IOR('G', 7, char *)
 #define RD_READDIR _IOWR('G', 8, struct Params) //param ds
 
+#define N 3655
+
 struct Params {
 	int fd;
 	char* addr;
@@ -29,6 +31,7 @@ int main(){
         return -1;
     }
 
+<<<<<<< HEAD
 
 	ioctl(fd, RD_MKDIR, "/dir1");
     ioctl(fd, RD_MKDIR, "/dir1/dir2_0");
@@ -48,50 +51,47 @@ int main(){
     write_p.fd = rdfd;
     write_p.addr = buf;
     write_p.count = 16;
+=======
+    //Create file
+    ioctl(fd, RD_MKDIR, "/file1");
+>>>>>>> dev
 
-    for(int i=0; i<8; i++){
-	    if(ioctl(fd, RD_READDIR, &write_p) == 0)
-	    	break;
-	    char *filename = buf;
-	    int16_t inode_num = *(buf + 14);
-	    printf("File: %.14s  Inode: %d\n", filename, inode_num);
-    }
+    //Open file
+    int rdfd = ioctl(fd, RD_OPEN, "/file1");
 
+    //Write to file
+    char *msg = "Admiration stimulated cultivated reasonable be projection possession of. Real no near room ye bred sake if some. Is arranging furnished knowledge agreeable so. Fanny as smile up small. It vulgar chatty simple months turned oh at change of. Astonished set expression solicitude way admiration.";
+    char *msg2 = malloc((strlen(msg)*N) + 1);
+    memset(msg2, 0, (strlen(msg)*N) + 1);
+    for(int i=0; i<N; i++){
+	    strcat(msg2, msg);
+	}
 
+    struct Params p1 = {
+    	.fd = rdfd,
+    	.addr = msg2,
+    	.count = strlen(msg2)+1
+    };
+    ioctl(fd, RD_WRITE, &p1);
 
-    //int rdfd = ioctl(fd, RD_OPEN, "/dir1/dir2_2/file1");
-    //char buf[] = "Hello World!";
-    //struct Params write_p;
-    //write_p.fd = rdfd;
-    //write_p.addr = buf;
-    //write_p.count = sizeof(buf);
-    //ioctl(fd, RD_WRITE, &write_p);
-    //ioctl(fd, RD_CLOSE, rdfd);
-    
-	//ioctl(fd, RD_UNLINK, "/dir1/dir2_2/file1");
-    //ioctl(fd, RD_CREAT, "/dir1/dir2_2/file1");   
-    /**
-    char *buf2 = malloc(sizeof(buf));
-    struct Params read_p;
-    read_p.fd = rdfd;
-    read_p.addr = buf2;
-    read_p.count = sizeof(buf);
-    ioctl(fd, RD_READ, &read_p);
-    printf("===> %s <===\n", buf2);
+    //Seek a bit
+    struct Params p3 = {
+    	.fd = rdfd,
+    	.count = 18390
+    };
+    //ioctl(fd, RD_LSEEK, &p3);
 
-    struct Params lseek;
-    lseek.fd = rdfd;
-    lseek.count = 3;
-    ioctl(fd, RD_LSEEK, &lseek);
+    //Read from file
+    char buf[(strlen(msg2)) + 1];
+    memset(buf, '\0', sizeof(buf));
+    struct Params p2 = {
+    	.fd = rdfd,
+    	.addr = buf,
+    	.count = strlen(msg2) + 1
+    };
+    ioctl(fd, RD_READ, &p2);
 
-    char *buf3 = malloc(sizeof(buf));
-    struct Params read_p2;
-    read_p2.fd = rdfd;
-    read_p2.addr = buf3;
-    read_p2.count = 5;
-    ioctl(fd, RD_READ, &read_p2);
-    printf("===> %s <===\n", buf3);
-	**/
+    printf("Len is %d. Reading: %s\n", strlen(buf), buf);
 
     if ((fd = close(fd)) < 0) {
         perror("close");

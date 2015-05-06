@@ -2,7 +2,6 @@
 #define KDISK_H
 
 #define MODULE_NAME "diskos"
-#define DISK_SIZE 2
 
 //IOCTL
 #define RD_CREAT _IOR('G', 0, char *)
@@ -25,8 +24,8 @@
 #define MAX_FILE_SIZE 	((64*256)+(64*64*256)+256*8)
 #define DISK_SIZE 		2	
 #define BLOCKSIZE 		256
-#define PART_SIZE		(DISK_SIZE * 1024 * 1024) - (BLOCKSIZE * (1+256+4))
-#define PART_COUNT		PART_SIZE / BLOCKSIZE
+#define PART_SIZE		((DISK_SIZE * 1024 * 1024) - (BLOCKSIZE * (1+256+4)))
+#define PART_COUNT		(PART_SIZE / BLOCKSIZE)
 
 #define INODE_SIZE 		64
 #define INODE_BLOCKSPAN 256
@@ -47,9 +46,15 @@ struct Block_file {
 	int8_t byte[BLOCKSIZE];
 };
 
+struct Block_ptr
+{
+	union Block *loc[BLOCKSIZE/4]; //64 pointers
+};
+
 union Block {
 	struct Block_file file;
 	struct Block_dir dir;
+	struct Block_ptr ptr;
 };
 
 struct SuperBlock{
@@ -102,7 +107,9 @@ int rd_mkdir(char *pathname);
 int rd_open(char *pathname);
 int rd_close(int fd);
 int rd_read(int fd, char *address, int num_bytes);
+int read_from_block(struct Inode *inode, union Block *block, char *buf, int count, int block_num, int *fd_pos);
 int rd_write(int fd, char *address, int num_bytes);
+void write_to_block(struct Inode *inode, union Block *block, char *data, int count);
 int rd_lseek(int fd, int offset);
 int rd_unlink(char *pathname);
 int rd_readdir(int fd, char *address);
