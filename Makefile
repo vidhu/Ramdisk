@@ -1,4 +1,4 @@
-ccflags-y := -std=gnu99 -Wno-declaration-after-statement
+ccflags-y := -g -DDEBUG -std=gnu99 -Wno-declaration-after-statement
 
 obj-m += kdisk.o
 

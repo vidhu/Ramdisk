@@ -9,7 +9,7 @@
 struct proc_dir_entry *proc_file;
 struct file_operations proc_file_fops = {
 	.owner 			= THIS_MODULE,
-	.unlocked_ioctl	= procfile_ioctl,
+	.unlocked_ioctl	= procfile_ioctl
 };
 
 struct FileDesc *fd_table[1024];
@@ -22,7 +22,6 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 
 	//File ops
 	struct Params params;
-	int byte_count;
 	char *data_address;
 
 	switch(cmd){
@@ -55,15 +54,17 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 			data_address = (char *) kmalloc(params.count, GFP_KERNEL);
 
 			//Read data
-			byte_count = rd_read(params.fd, data_address, params.count);
+			result = rd_read(params.fd, data_address, params.count);
 
 			//Check if successfull
-			if(params.count != byte_count){
+			if(params.count != result){
 				result = -1;
 				break;
 			}
 
 			//Copy read data to user space
+			printk("Going to read '%d' chars", strlen(data_address));
+			printk("Read: %.*s\n", params.count, data_address);
 			copy_to_user(params.addr, data_address, params.count);
 			printk("RD_Read successfull\n");
 			break;
@@ -76,14 +77,14 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 			copy_from_user(data_address, params.addr, params.count);
 
 			//Write data
-			byte_count = rd_write(params.fd, data_address, params.count);
+			result = rd_write(params.fd, data_address, params.count);
 			
-			//Check if successful
 			//Check if successfull
-			if(params.count != byte_count){
+			if(params.count != result){
 				result = -1;
 				break;
 			}
+
 			printk("RD_Write successfull\n");
 
 			break;
@@ -116,6 +117,11 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 		default:
 			return -ENOTTY;
 	}
+	printk("~~~~~~~~~~ Status ~~~~~~~~~~\n");
+	printk("\tResult:\t%d\n", result);
+	printk("\tInode:\t%d\n", disk->superBlock.freeInode);
+	printk("\tBlock:\t%d\n", disk->superBlock.freeblock);
+	printk("~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\n");
 	return result;
 }
 
@@ -127,21 +133,28 @@ int rd_creat(char *pathname){
 	printk("Creating file: %s\n", pathname);
 	printk("File name: '%s'\tDir name: '%s'\n", dirname, parentdir);
 
+	//Check if file or dir already exists or not
+	if(get_inode_number(pathname) != -1)
+		return -1;
+
 	//Get end path inode
-	int parent_inode = get_inode_number(parentdir);
+	int parent_inode;
+	if((parent_inode = get_inode_number(parentdir)) == -1)
+		return -1; //Inode not found
 	printk("Dir inode at: %d\n", parent_inode);
 
 	//Create the file
-	int newInode = find_free_inode();
+	int newInode;
+	if((newInode = find_free_inode()) == -1)
+		return -1; //Inodes are full
 	strncpy(disk->inode[newInode].type, "reg", 4);
 	disk->inode[newInode].size = 0;
 	printk("File inode at: %d\n", newInode);
 
-
 	//Insert new Inode into parent's
 	insert_Inode(parent_inode, newInode, dirname);
-	//Debug: check inode number of newly create dir "/dir1"
 	
+	//Debug: check inode number of newly create dir "/dir1"
 	printk("'Testing: /%s' at: %d\n", dirname, get_inode_number(pathname));
 	printk("=================================\n");
 	return 0;
@@ -155,12 +168,20 @@ int rd_mkdir(char *pathname){
 	printk("Creating dir: %s\n", pathname);
 	printk("Dir name: '%s'\tParent name: '%s'\n", dirname, parentdir);
 
+	//Check if file or dir already exists or not
+	if(get_inode_number(pathname) != -1)
+		return -1;
+
 	//Get end path inode
-	int parent_inode = get_inode_number(parentdir);
+	int parent_inode;
+	if((parent_inode = get_inode_number(parentdir)) == -1)
+		return -1; //Inode not found
 	printk("Parent inode at: %d\n", parent_inode);
 
 	//Create the directory
-	int newInode = find_free_inode();
+	int newInode;
+	if((newInode = find_free_inode()) == -1)
+		return -1; //inodes are full
 	strncpy(disk->inode[newInode].type, "dir", 4);
 	disk->inode[newInode].size = 0;
 	printk("Child inode at: %d\n", newInode);
@@ -168,8 +189,8 @@ int rd_mkdir(char *pathname){
 
 	//Insert new Inode into parent's
 	insert_Inode(parent_inode, newInode, dirname);
-	//Debug: check inode number of newly create dir "/dir1"
 	
+	//Debug: check inode number of newly create dir "/dir1"
 	printk("'Testing: /%s' at: %d\n", dirname, get_inode_number(pathname));
 	printk("=================================\n");
 	return 0;
@@ -180,12 +201,10 @@ int rd_open(char *pathname){
 	printk("==RD_OPEN========================\n");
 
 	//Get Inode index for the path name
-	int inode_index = get_inode_number(pathname);
+	int inode_index;
+	if((inode_index = get_inode_number(pathname)) == -1)
+		return -1; //file doesn't exist
 	printk("File is at inode: %d\n", inode_index);
-
-	//Returns error if path doesn't exist
-	if(inode_index  == -1)
-		return -1;
 
 	//Some other process is using it. lol
 	if(fd_table[inode_index] != NULL)
@@ -233,14 +252,12 @@ int rd_read(int fd, char *address, int num_bytes){
 	printk("fd_table[%d]->position is: %d\n", fd, fd_table[fd]->position);
 
 	struct Inode *inode = &disk->inode[fd];
-	
-	//Return if file descriptor position os greater than file size
-	if(inode->size >= *fd_position)
+	//Return if file descriptor position is greater than file size
+	if(inode->size <= *fd_position)
 		return 0;
 
 	//Calculate position to start reading from
 	int inode_block_num = (*fd_position)/256;
-	int inode_block_offset = (*fd_position) % 256;
 
 	//Start reading from calculated of set
 	for(int i=inode_block_num; i<8; i++){
@@ -248,35 +265,61 @@ int rd_read(int fd, char *address, int num_bytes){
 		if(inode->location[i] == NULL)
 			return -1;
 
-		union Block *b = inode->location[i];
-		printk("Reading data from inode.location[%d] at addr: %p\n", i, b);
-		for(int j=inode_block_offset; j<256; j++){
-
-			//Debuging
-			printk("\tReading char: %c\n", b->file.byte[j]);
-
-			//Read data
-			address[(256*i)+j] = b->file.byte[j];
-
-			//Update fd and byte count
-			bytes_read++;
-			(*fd_position)++;
-
-			//Return if read num_bytes or reached end of file
-			if((bytes_read == num_bytes) || (*fd_position) == inode->size){
-				//Reset fd->position
-				(*fd_position) = 0;
-
-				printk("Bytes read: %d\n", bytes_read);
-				printk("=================================\n");
-				return bytes_read;
-			}
-
-
+		printk("Reading data from inode.location[%d] at addr: %p\n", i, inode->location[i]);
+		bytes_read += read_from_block(inode, inode->location[i], address+(256*i), num_bytes, i, fd_position);
+		printk("Bytes read: %d\n", bytes_read);
+		if((bytes_read == num_bytes) || (*fd_position) == inode->size){
+			(*fd_position) = 0;
+			
+			printk("=================================\n");
+			return bytes_read;
 		}
 	}
 	
+	//Try reading in single indirect block pointer
+	inode_block_num = (*fd_position)/256;
+	for(int i=(inode_block_num-8); i<64; i++){
+		//Check if block is allocated or not. If not, then there is no content
+		if(inode->location[9]->ptr.loc[i] == NULL)
+			return -1;
+
+		printk("Reading data from inode.location[9]->ptr.loc[%d] at addr: %p\n", i, inode->location[9]->ptr.loc[i]);
+		bytes_read += read_from_block(inode, inode->location[9]->ptr.loc[i], address+(256*(i+8)), num_bytes, (i+8), fd_position);
+		printk("Bytes read: %d\n", bytes_read);
+		if((bytes_read == num_bytes) || (*fd_position) == inode->size){
+			(*fd_position) = 0;
+			
+			printk("=================================\n");
+			return bytes_read;
+		}
+	}
+
 	return -1;
+}
+
+int read_from_block(struct Inode *inode, union Block *b, char *buf, int count, int block_num, int *fd_pos){
+	int bytes_read = 0;
+	int j = 0;
+	if(*fd_pos < (block_num*256)){
+		j = *fd_pos % 256;
+	}
+	for(; j<count && j < 256; j++){
+
+		//Debuging
+		//printk("\t%d Reading char byte[%d]: %c\n",j ,*fd_pos ,b->file.byte[(*fd_pos) % 256]);
+
+		//Read data
+		buf[j] = b->file.byte[(*fd_pos) % 256];
+
+		//Update fd and bytes_read
+		(*fd_pos)++;
+		bytes_read++;
+
+		//Return if read num_bytes or reached end of file
+		if((*fd_pos) == inode->size) return bytes_read;
+	}
+
+	return bytes_read;
 }
 
 int rd_write(int fd, char *address, int num_bytes){
@@ -284,44 +327,116 @@ int rd_write(int fd, char *address, int num_bytes){
 	printk("Need to write '%d bytes' into inode '%d' from address: 0x%p\n", num_bytes, fd, address);
 	printk("Address '0x%p' contains: %s\n", address, address);
 
+	//Error checking
+	if(fd_table[fd] == NULL)
+		return -1; // Non-existant is hasn't been open yet
+	if(strncmp(fd_table[fd]->inode->type,"dir",3))
+		return -1; //This is a directory file
+
+
 	int bytes_written = 0;
-	int *fd_position = &(fd_table[fd]->position);
+	int bytes_left = num_bytes;
 
 	struct Inode *inode = &disk->inode[fd];
+
+	//Write to first 8 block pointers
 	for(int i=0; i<8; i++){
 		//Check if block is allocated or not. If not, allocate it a block
 		if(inode->location[i] == NULL)
 			inode->location[i] = allocate_block();
-
 		printk("Writting data to inode.location[%d] at addr: %p\n", i, inode->location[i]);
-		for(int j=0; j<256; j++){
 
-			//Debugging
-			printk("\tWritting char: %c\n", address[(256*i)+j]);
+		//Calculate how much data to write
+		int tmp = 256;
+		if(bytes_left < 256) tmp = bytes_left;
 
-			//Write data
-			inode->location[i]->file.byte[j] = address[(256*i)+j];
+		//Write data
+		write_to_block(inode, inode->location[i], address+(256*i), tmp);
 
-			//Increament file size
-			inode->size++;
+		//Update trackers
+		bytes_written += tmp;
+		bytes_left -= tmp;
 
-			//Update fd
-			bytes_written++;
-			(*fd_position)++;
-
-			if(bytes_written == num_bytes){
-				//Reset fd->position
-				(*fd_position) = 0;
-
-				printk("Bytes Written: %d\n", bytes_written);
-				printk("=================================\n");
-				return bytes_written;
-			}
-
+		//stop if done
+		if(bytes_left == 0){
+			printk("Bytes Written: %d\n", bytes_written);
+			printk("=================================\n");
+			return bytes_written;
 		}
 	}
 
+	//Write to 9th single indirect block pointer
+	//Check if block is allocated or not. If not, allocate it a block
+	if(inode->location[9] == NULL)
+		inode->location[9] = allocate_block();
+	for(int i=0; i<64; i++){
+		//Check if block is allocated or not. If not, allocate it a block
+		if(inode->location[9]->ptr.loc[i] == NULL)
+			inode->location[9]->ptr.loc[i] = allocate_block();
+		printk("Writting data to inode.location[9]->ptr.loc[%d] at addr: %p\n", i, inode->location[9]->ptr.loc);
+
+		//Calculate how much data to write
+		int tmp = 256;
+		if(bytes_left < 256) tmp = bytes_left;
+
+		//Write data
+		write_to_block(inode, inode->location[9]->ptr.loc[i], address+(256*i), tmp);
+
+		//Update trackers
+		bytes_written += tmp;
+		bytes_left -= tmp;
+
+		//stop if done
+		if(bytes_left == 0){
+			printk("Bytes Written: %d\n", bytes_written);
+			printk("=================================\n");
+			return bytes_written;
+		}
+	}
+	
+
+	//Write to 10th double indirect block poiner
+	//Check if block is allocated or not. If not, allocate it a block
+	if(inode->location[10] == NULL)
+		inode->location[10] = allocate_block();
+	for(int i=0; i<64; i++){
+		//Check if block is allocated or not. If not, allocate it a block
+		if(inode->location[9]->ptr.loc[i] == NULL)
+			inode->location[9]->ptr.loc[i] = allocate_block();
+		printk("Writting data to inode.location[9]->ptr.loc[%d] at addr: %p\n", i, inode->location[9]->ptr.loc);
+
+		//Calculate how much data to write
+		int tmp = 256;
+		if(bytes_left < 256) tmp = bytes_left;
+
+		//Write data
+		write_to_block(inode, inode->location[9]->ptr.loc[i], address+(256*i), tmp);
+
+		//Update trackers
+		bytes_written += tmp;
+		bytes_left -= tmp;
+
+		//stop if done
+		if(bytes_left == 0){
+			printk("Bytes Written: %d\n", bytes_written);
+			printk("=================================\n");
+			return bytes_written;
+		}
+	}
 	return -1;
+}
+
+void write_to_block(struct Inode *inode, union Block *block, char *data, int count){
+	for(int j=0; j<count; j++){
+		//Debugging
+		//printk("\tWritting char: %c\n", data[j]);
+
+		//Write data
+		block->file.byte[j] = data[j];
+
+		//Increament file size
+		inode->size++;
+	}
 }
 
 int rd_lseek(int fd, int offset){
@@ -429,7 +544,7 @@ int find_free_inode(){
 		return -1;
 
 	for(int i=0; i < INODE_COUNT; i++){
-		if(disk->inode[i].type[0] == 0){ //inod is free
+		if(disk->inode[i].type[0] == 0){ //inode is free
 			disk->superBlock.freeInode--;
 			return i;
 		}
@@ -441,6 +556,8 @@ int find_free_inode(){
 //Returns the inode index of the provided path
 int get_inode_number(char* pathname){
 	printk("\t\tGetting inode for: %s\n", pathname);
+	if(disk->superBlock.freeInode == 0)
+		return -1;
 	if(pathname[0] != '/')
 		return -1;
 	if(strlen(pathname) == 1)
@@ -452,7 +569,8 @@ int get_inode_number(char* pathname){
 	int nodeIndex = 0; //inode of root dir
   	char *token, *strpos = pathname;
   	while ((token=strsep(&strpos,"/")) != NULL){
-    	nodeIndex = get_inode_number_helper(nodeIndex, token);
+    	if((nodeIndex = get_inode_number_helper(nodeIndex, token)) == -1)
+    		break;
     	printk("\t\tNode Index for '%s': %d\n", token ,nodeIndex);
   	}
   	
@@ -469,6 +587,7 @@ int get_inode_number_helper(int index, char *dir_name){
 
 	struct Inode *inode = &(disk->inode[index]);
 	
+	//Check in first 8 block pointers
 	for(int i=0; i<8; i++){
 		union Block *b = inode->location[i];
 
@@ -479,6 +598,22 @@ int get_inode_number_helper(int index, char *dir_name){
 				if(b->dir.entry[j].filename[0] != 0){
 					if(!strncmp(b->dir.entry[j].filename, dir_name, 14))
 						return b->dir.entry[j].inode_number;
+				}
+			}
+		}
+	}
+	
+	//Check in 9th single indirect block pointer
+	if(inode->location[9] == 0) return -1;
+	for(int i=0; i<64; i++){
+		union Block *b = inode->location[9]->ptr.loc[i];
+		//Search for entires in the block
+		if(b != 0){
+			for(int j=0; j<16; j++){
+				//Some entry in this...?
+				if(b->dir.entry[j].filename[0] != 0){
+					//if(!strncmp(b->dir.entry[j].filename, dir_name, 14))
+					//	return b->dir.entry[j].inode_number;
 				}
 			}
 		}
@@ -495,6 +630,8 @@ int insert_Inode(int parent, int child, char *fileName){
 	printk("\t\tInserting '%s' at inode %d in parent with inode %d\n", fileName, child, parent);
 
 	union Block *b;
+
+	//Within the first 8 direct block pointers
 	for(int i=0;i<8;i++){
 		b = disk->inode[parent].location[i];
 		//Allocate new block
@@ -506,12 +643,36 @@ int insert_Inode(int parent, int child, char *fileName){
 			if(b->dir.entry[j].filename[0] == 0){ //found a free area
 				strncpy(b->dir.entry[j].filename, fileName, 13); //truncate any long strings
 				b->dir.entry[j].inode_number = child;
-				disk->superBlock.freeInode--;
 				return 0;
 			}
 		}
-	}	
+	}
 
+	//In the 9 single indirect block pointer
+	union Block *block_ptr = disk->inode[parent].location[9];
+	if(block_ptr == 0){
+		disk->inode[parent].location[9] = allocate_block();
+		block_ptr = disk->inode[parent].location[9];
+	}
+	for(int i=0; i<64; i++){	
+		b = block_ptr->ptr.loc[i];
+		//Allocate new block
+		if(b == 0){
+			printk("===> %d\n", b == 0);
+			block_ptr->ptr.loc[i] = allocate_block();
+			b = block_ptr->ptr.loc[i];
+			printk("===> %p\n", b);
+		}
+		
+		for(int j=0; j<16; j++){
+			if(b->dir.entry[j].filename[0] == 0){ //found a free area
+				strncpy(b->dir.entry[j].filename, fileName, 13); //truncate any long strings
+				b->dir.entry[j].inode_number = child;
+				return 0;
+			}
+		}
+
+	}
 	return -1;
 }
 
@@ -589,6 +750,10 @@ int init_module(){
 	disk->superBlock.freeblock = PART_COUNT;
 
 	printk("Ram disk Initialized: %s\n", MODULE_NAME);
+	printk("~~~~ Super Block Status ~~~~\n");
+	printk("\tInode count: %d\n", disk->superBlock.freeInode);
+	printk("\tBlock count: %d\n", PART_COUNT);
+	printk("~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
 	return 0;
 }
 
