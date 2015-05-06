@@ -16,7 +16,7 @@
 #define RD_UNLINK _IOR('G', 7, char *)
 #define RD_READDIR _IOWR('G', 8, struct Params) //param ds
 
-#define N 24
+#define N 3655
 
 struct Params {
 	int fd;
@@ -39,9 +39,9 @@ int main(){
 
     //Write to file
     char *msg = "Admiration stimulated cultivated reasonable be projection possession of. Real no near room ye bred sake if some. Is arranging furnished knowledge agreeable so. Fanny as smile up small. It vulgar chatty simple months turned oh at change of. Astonished set expression solicitude way admiration.";
-    char *msg2 = malloc((strlen(msg)*63) + 1);
-    memset(msg2, 0, (strlen(msg)*63) + 1);
-    for(int i=0; i<63; i++){
+    char *msg2 = malloc((strlen(msg)*N) + 1);
+    memset(msg2, 0, (strlen(msg)*N) + 1);
+    for(int i=0; i<N; i++){
 	    strcat(msg2, msg);
 	}
 

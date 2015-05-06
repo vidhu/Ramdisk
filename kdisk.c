@@ -265,7 +265,7 @@ int rd_read(int fd, char *address, int num_bytes){
 		if(inode->location[i] == NULL)
 			return -1;
 
-		printk("Reading data from inode.location[%d] at addr: %p\n", i, inode->location[i]);
+		printk("Reading from inode.location[%d] at addr: %p\n", i, inode->location[i]);
 		bytes_read += read_from_block(inode, inode->location[i], address+(256*i), num_bytes, i, fd_position);
 		printk("Bytes read: %d\n", bytes_read);
 		if((bytes_read == num_bytes) || (*fd_position) == inode->size){
@@ -280,17 +280,44 @@ int rd_read(int fd, char *address, int num_bytes){
 	inode_block_num = (*fd_position)/256;
 	for(int i=(inode_block_num-8); i<64; i++){
 		//Check if block is allocated or not. If not, then there is no content
-		if(inode->location[9]->ptr.loc[i] == NULL)
+		if(inode->location[8]->ptr.loc[i] == NULL)
 			return -1;
 
-		printk("Reading data from inode.location[9]->ptr.loc[%d] at addr: %p\n", i, inode->location[9]->ptr.loc[i]);
-		bytes_read += read_from_block(inode, inode->location[9]->ptr.loc[i], address+(256*(i+8)), num_bytes, (i+8), fd_position);
+		printk("Reading from inode.location[8]->ptr.loc[%d] at addr: %p\n", i, inode->location[8]->ptr.loc[i]);
+		bytes_read += read_from_block(inode, inode->location[8]->ptr.loc[i], address+(256*(i+8)), num_bytes, (i+8), fd_position);
 		printk("Bytes read: %d\n", bytes_read);
 		if((bytes_read == num_bytes) || (*fd_position) == inode->size){
 			(*fd_position) = 0;
 			
 			printk("=================================\n");
 			return bytes_read;
+		}
+	}
+
+	//Try reading in double indirect block pointer
+	inode_block_num = (*fd_position)/256;
+	for(int i=0; i<64; i++){
+		//Check if block is allocated or not. If not, then there is no content
+		if(inode->location[8]->ptr.loc[i] == NULL)
+			return -1;
+
+		for(int j=0; j<64; j++){
+			if(inode->location[8]->ptr.loc[i]->ptr.loc[j] == NULL)
+				return -1;
+
+			printk("Reading from inode.location[9]->ptr.loc[%d]->ptr.loc[%d] at addr: %p\n", i, j, 
+				inode->location[8]->ptr.loc[i]->ptr.loc[j]);
+
+			bytes_read += read_from_block(inode, inode->location[9]->ptr.loc[i]->ptr.loc[j],
+						address+(256*(8+64+(i*j))), num_bytes, 8+64+(i*j), fd_position);
+
+			printk("Bytes read: %d\n", bytes_read);
+			if((bytes_read == num_bytes) || (*fd_position) == inode->size){
+				(*fd_position) = 0;
+				
+				printk("=================================\n");
+				return bytes_read;
+			}
 		}
 	}
 
@@ -344,7 +371,7 @@ int rd_write(int fd, char *address, int num_bytes){
 		//Check if block is allocated or not. If not, allocate it a block
 		if(inode->location[i] == NULL)
 			inode->location[i] = allocate_block();
-		printk("Writting data to inode.location[%d] at addr: %p\n", i, inode->location[i]);
+		printk("Writting to inode.location[%d] at addr: %p\n", i, inode->location[i]);
 
 		//Calculate how much data to write
 		int tmp = 256;
@@ -367,20 +394,20 @@ int rd_write(int fd, char *address, int num_bytes){
 
 	//Write to 9th single indirect block pointer
 	//Check if block is allocated or not. If not, allocate it a block
-	if(inode->location[9] == NULL)
-		inode->location[9] = allocate_block();
+	if(inode->location[8] == NULL)
+		inode->location[8] = allocate_block();
 	for(int i=0; i<64; i++){
 		//Check if block is allocated or not. If not, allocate it a block
-		if(inode->location[9]->ptr.loc[i] == NULL)
-			inode->location[9]->ptr.loc[i] = allocate_block();
-		printk("Writting data to inode.location[9]->ptr.loc[%d] at addr: %p\n", i, inode->location[9]->ptr.loc);
+		if(inode->location[8]->ptr.loc[i] == NULL)
+			inode->location[8]->ptr.loc[i] = allocate_block();
+		printk("Writting to inode.location[8]->ptr.loc[%d] at addr: %p\n", i, inode->location[8]->ptr.loc);
 
 		//Calculate how much data to write
 		int tmp = 256;
 		if(bytes_left < 256) tmp = bytes_left;
 
 		//Write data
-		write_to_block(inode, inode->location[9]->ptr.loc[i], address+(256*i), tmp);
+		write_to_block(inode, inode->location[8]->ptr.loc[i], address+(2048)+(256*i), tmp);
 
 		//Update trackers
 		bytes_written += tmp;
@@ -394,35 +421,40 @@ int rd_write(int fd, char *address, int num_bytes){
 		}
 	}
 	
-
 	//Write to 10th double indirect block poiner
 	//Check if block is allocated or not. If not, allocate it a block
-	if(inode->location[10] == NULL)
-		inode->location[10] = allocate_block();
+	if(inode->location[9] == NULL)
+		inode->location[9] = allocate_block();
 	for(int i=0; i<64; i++){
 		//Check if block is allocated or not. If not, allocate it a block
 		if(inode->location[9]->ptr.loc[i] == NULL)
 			inode->location[9]->ptr.loc[i] = allocate_block();
-		printk("Writting data to inode.location[9]->ptr.loc[%d] at addr: %p\n", i, inode->location[9]->ptr.loc);
+		for(int j=0; j<64; j++){
+			if(inode->location[9]->ptr.loc[i]->ptr.loc[j] == NULL)
+				inode->location[9]->ptr.loc[i]->ptr.loc[j] = allocate_block();
+			printk("Writting to inode.location[9]->ptr.loc[%d]->ptr.loc[%d] at addr: %p\n", i, j, 
+				inode->location[9]->ptr.loc[i]->ptr.loc[j]);
 
-		//Calculate how much data to write
-		int tmp = 256;
-		if(bytes_left < 256) tmp = bytes_left;
+			//Calculate how much data to write
+			int tmp = 256;
+			if(bytes_left < 256) tmp = bytes_left;
 
-		//Write data
-		write_to_block(inode, inode->location[9]->ptr.loc[i], address+(256*i), tmp);
+			//Write data
+			write_to_block(inode, inode->location[9]->ptr.loc[i]->ptr.loc[j], address+18432+(i*j*256), tmp);
 
-		//Update trackers
-		bytes_written += tmp;
-		bytes_left -= tmp;
+			//Update trackers
+			bytes_written += tmp;
+			bytes_left -= tmp;
 
-		//stop if done
-		if(bytes_left == 0){
-			printk("Bytes Written: %d\n", bytes_written);
-			printk("=================================\n");
-			return bytes_written;
+			//stop if done
+			if(bytes_left == 0){
+				printk("Bytes Written: %d\n", bytes_written);
+				printk("=================================\n");
+				return bytes_written;
+			}
 		}
 	}
+	
 	return -1;
 }
 
