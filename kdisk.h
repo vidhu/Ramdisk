@@ -122,6 +122,7 @@ int insert_Inode(int parent, int child, char *fileName);
 union Block* allocate_block(void);
 int isBlockFree(int block);
 int delete_blocks(struct Inode *inode);
+void delete_blocks_helper(union Block *block);
 int delete_Inode(int parent, int child);
 //End prototypes
 #endif

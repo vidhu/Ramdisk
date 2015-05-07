@@ -16,7 +16,7 @@
 #define RD_UNLINK _IOR('G', 7, char *)
 #define RD_READDIR _IOWR('G', 8, struct Params) //param ds
 
-#define N 3655
+#define N 2
 
 struct Params {
 	int fd;
@@ -32,7 +32,7 @@ int main(){
     }
 
     //Create file
-    ioctl(fd, RD_MKDIR, "/file1");
+    ioctl(fd, RD_CREAT, "/file1");
 
     //Open file
     int rdfd = ioctl(fd, RD_OPEN, "/file1");
@@ -55,7 +55,7 @@ int main(){
     //Seek a bit
     struct Params p3 = {
     	.fd = rdfd,
-    	.count = 18390
+    	.count = 292
     };
     //ioctl(fd, RD_LSEEK, &p3);
 
@@ -65,11 +65,16 @@ int main(){
     struct Params p2 = {
     	.fd = rdfd,
     	.addr = buf,
-    	.count = strlen(msg2) + 1
+    	.count = (strlen(msg2) + 1)
     };
     ioctl(fd, RD_READ, &p2);
-
     printf("Len is %d. Reading: %s\n", strlen(buf), buf);
+
+    //Close file
+    ioctl(fd, RD_CLOSE, rdfd);
+
+    //Delete file
+    ioctl(fd, RD_UNLINK, "/file1");
 
     if ((fd = close(fd)) < 0) {
         perror("close");
