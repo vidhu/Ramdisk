@@ -31,76 +31,7 @@ int main(){
         return -1;
     }
 
-<<<<<<< HEAD
-
-	ioctl(fd, RD_MKDIR, "/dir1");
-    ioctl(fd, RD_MKDIR, "/dir1/dir2_0");
-    ioctl(fd, RD_MKDIR, "/dir1/dir2_1");
-    ioctl(fd, RD_MKDIR, "/dir1/dir2_2");
-    ioctl(fd, RD_MKDIR, "/dir1/dir2_3");   
-    ioctl(fd, RD_MKDIR, "/dir1/dir2_4");   
-    ioctl(fd, RD_MKDIR, "/dir1/dir2_5");   
-    ioctl(fd, RD_MKDIR, "/dir1/dir2_6");
-    //ioctl(fd, RD_CREAT, "/dir1/dir2_2/file1");
     
-    ioctl(fd, RD_UNLINK, "/dir1/dir2_2");
-
-    int rdfd = ioctl(fd, RD_OPEN, "/dir1");
-    char buf[16];
-    struct Params write_p;
-    write_p.fd = rdfd;
-    write_p.addr = buf;
-    write_p.count = 16;
-=======
-    //Create file
-<<<<<<< HEAD
-    ioctl(fd, RD_MKDIR, "/file1");
->>>>>>> dev
-=======
-    ioctl(fd, RD_CREAT, "/file1");
->>>>>>> dev
-
-    //Open file
-    int rdfd = ioctl(fd, RD_OPEN, "/file1");
-
-    //Write to file
-    char *msg = "Admiration stimulated cultivated reasonable be projection possession of. Real no near room ye bred sake if some. Is arranging furnished knowledge agreeable so. Fanny as smile up small. It vulgar chatty simple months turned oh at change of. Astonished set expression solicitude way admiration.";
-    char *msg2 = malloc((strlen(msg)*N) + 1);
-    memset(msg2, 0, (strlen(msg)*N) + 1);
-    for(int i=0; i<N; i++){
-	    strcat(msg2, msg);
-	}
-
-    struct Params p1 = {
-    	.fd = rdfd,
-    	.addr = msg2,
-    	.count = strlen(msg2)+1
-    };
-    ioctl(fd, RD_WRITE, &p1);
-
-    //Seek a bit
-    struct Params p3 = {
-    	.fd = rdfd,
-    	.count = 292
-    };
-    //ioctl(fd, RD_LSEEK, &p3);
-
-    //Read from file
-    char buf[(strlen(msg2)) + 1];
-    memset(buf, '\0', sizeof(buf));
-    struct Params p2 = {
-    	.fd = rdfd,
-    	.addr = buf,
-    	.count = (strlen(msg2) + 1)
-    };
-    ioctl(fd, RD_READ, &p2);
-    printf("Len is %d. Reading: %s\n", strlen(buf), buf);
-
-    //Close file
-    ioctl(fd, RD_CLOSE, rdfd);
-
-    //Delete file
-    ioctl(fd, RD_UNLINK, "/file1");
 
     if ((fd = close(fd)) < 0) {
         perror("close");
