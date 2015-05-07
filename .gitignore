@@ -36,3 +36,6 @@ modules.order
 
 # Debug files
 *.dSYM/
+
+*.sublime-project
+*.sublime-workspace
