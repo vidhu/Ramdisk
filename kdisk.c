@@ -63,7 +63,7 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 			}
 
 			//Copy read data to user space
-			printk("Going to read '%d' chars", strlen(data_address));
+			printk("Going to read '%d' chars\n", params.count);
 			printk("Read: %.*s\n", params.count, data_address);
 			copy_to_user(params.addr, data_address, params.count);
 			printk("RD_Read successfull\n");
@@ -283,9 +283,9 @@ int rd_read(int fd, char *address, int num_bytes){
 		if(inode->location[8]->ptr.loc[i] == NULL)
 			return -1;
 
-		printk("Reading from inode.location[8]->ptr.loc[%d] at addr: %p\n", i, inode->location[8]->ptr.loc[i]);
+		//printk("Reading from inode.location[8]->ptr.loc[%d] at addr: %p\n", i, inode->location[8]->ptr.loc[i]);
 		bytes_read += read_from_block(inode, inode->location[8]->ptr.loc[i], address+(256*(i+8)), num_bytes, (i+8), fd_position);
-		printk("Bytes read: %d\n", bytes_read);
+		//printk("Bytes read: %d\n", bytes_read);
 		if((bytes_read == num_bytes) || (*fd_position) == inode->size){
 			(*fd_position) = 0;
 			
@@ -305,13 +305,13 @@ int rd_read(int fd, char *address, int num_bytes){
 			if(inode->location[8]->ptr.loc[i]->ptr.loc[j] == NULL)
 				return -1;
 
-			printk("Reading from inode.location[9]->ptr.loc[%d]->ptr.loc[%d] at addr: %p\n", i, j, 
-				inode->location[8]->ptr.loc[i]->ptr.loc[j]);
+			//printk("Reading from inode.location[9]->ptr.loc[%d]->ptr.loc[%d] at addr: %p\n", i, j, 
+			//	inode->location[8]->ptr.loc[i]->ptr.loc[j]);
 
 			bytes_read += read_from_block(inode, inode->location[9]->ptr.loc[i]->ptr.loc[j],
 						address+(256*(8+64+(i*j))), num_bytes, 8+64+(i*j), fd_position);
 
-			printk("Bytes read: %d\n", bytes_read);
+			//printk("Bytes read: %d\n", bytes_read);
 			if((bytes_read == num_bytes) || (*fd_position) == inode->size){
 				(*fd_position) = 0;
 				
@@ -357,7 +357,8 @@ int rd_write(int fd, char *address, int num_bytes){
 	//Error checking
 	if(fd_table[fd] == NULL)
 		return -1; // Non-existant is hasn't been open yet
-	if(strncmp(fd_table[fd]->inode->type,"dir",3))
+	
+	if(!strncmp(fd_table[fd]->inode->type,"dir",3))
 		return -1; //This is a directory file
 
 
@@ -371,7 +372,7 @@ int rd_write(int fd, char *address, int num_bytes){
 		//Check if block is allocated or not. If not, allocate it a block
 		if(inode->location[i] == NULL)
 			inode->location[i] = allocate_block();
-		printk("Writting to inode.location[%d] at addr: %p\n", i, inode->location[i]);
+		//printk("Writting to inode.location[%d] at addr: %p\n", i, inode->location[i]);
 
 		//Calculate how much data to write
 		int tmp = 256;
@@ -400,7 +401,7 @@ int rd_write(int fd, char *address, int num_bytes){
 		//Check if block is allocated or not. If not, allocate it a block
 		if(inode->location[8]->ptr.loc[i] == NULL)
 			inode->location[8]->ptr.loc[i] = allocate_block();
-		printk("Writting to inode.location[8]->ptr.loc[%d] at addr: %p\n", i, inode->location[8]->ptr.loc);
+		//printk("Writting to inode.location[8]->ptr.loc[%d] at addr: %p\n", i, inode->location[8]->ptr.loc);
 
 		//Calculate how much data to write
 		int tmp = 256;
@@ -432,8 +433,8 @@ int rd_write(int fd, char *address, int num_bytes){
 		for(int j=0; j<64; j++){
 			if(inode->location[9]->ptr.loc[i]->ptr.loc[j] == NULL)
 				inode->location[9]->ptr.loc[i]->ptr.loc[j] = allocate_block();
-			printk("Writting to inode.location[9]->ptr.loc[%d]->ptr.loc[%d] at addr: %p\n", i, j, 
-				inode->location[9]->ptr.loc[i]->ptr.loc[j]);
+			//printk("Writting to inode.location[9]->ptr.loc[%d]->ptr.loc[%d] at addr: %p\n", i, j, 
+				//inode->location[9]->ptr.loc[i]->ptr.loc[j]);
 
 			//Calculate how much data to write
 			int tmp = 256;
@@ -737,6 +738,7 @@ union Block* allocate_block(){
 		if(isBlockFree(i)){
 			disk->bitmap.map[i / 8] = (disk->bitmap.map[i / 8] | SET_BIT_1(i%8));
 			disk->superBlock.freeblock--;
+			memset(&disk->part[i], 0, BLOCKSIZE);
 			return &disk->part[i];
 		}
 	}
@@ -744,19 +746,50 @@ union Block* allocate_block(){
 }
 
 int delete_blocks(struct Inode *inode){
+	union Block *block;
+
+	//Delete direct block  pointer blocks
+	printk("Deleting blocks in inode->location[i]\n");
 	for(int i=0; i<8; i++){
 		//Search block with address *block
-		union Block *block = inode->location[i];
-		for(int j=0; j<7931; j++){
-			if(block == &(disk->part[j])){
-				printk("\t\tDeleting block: %d\n", j);
-				disk->bitmap.map[j / 8] = (disk->bitmap.map[j / 8] | SET_BIT_0(j%8));
-				disk->superBlock.freeblock++;
-				memset(block, 0, 256);
-			}
+		block = inode->location[i];
+		delete_blocks_helper(block);
+	}
+	
+	//Delete single indirect block pointer
+	printk("Deleting blocks in inode->location[8]->ptr.loc[i]\n");
+	block = inode->location[8];
+	if(block == 0) return 0;
+	for(int i=0; i<64; i++){
+		delete_blocks_helper(inode->location[8]->ptr.loc[i]);
+	}
+	delete_blocks_helper(block);
+
+	//Delete double indirect block pointer
+	printk("Deleting blocks in inode->location[9]->ptr.loc[i]->ptr.loc[j]\n");
+	block = inode->location[9];
+	if(block == 0) return 0;
+	for(int i=0; i<64; i++){
+		for(int j=0; j<64; j++){
+			if(inode->location[9]->ptr.loc[i] == 0) return 0;
+			delete_blocks_helper(inode->location[9]->ptr.loc[i]->ptr.loc[j]);
+		}
+		delete_blocks_helper(inode->location[9]->ptr.loc[i]);
+	}
+	delete_blocks_helper(block);
+	printk("Deleting done!\n");
+	return 0;
+}
+
+void delete_blocks_helper(union Block *block){
+	for(int j=0; j<7931; j++){
+		if(block == &(disk->part[j])){
+			//printk("\t\tDeleting block: %d\n", j);
+			disk->bitmap.map[j / 8] = (disk->bitmap.map[j / 8] | SET_BIT_0(j%8));
+			disk->superBlock.freeblock++;
+			memset(block, 0, 256);
 		}
 	}
-	return 0;
 }
 
 //Uses the bitmap to check if a block is free is not
