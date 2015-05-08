@@ -484,7 +484,7 @@ int rd_write(int fd, char *address, int num_bytes){
 
 int rd_lseek(int fd, int offset){
 	printk("Moving fd_table[%d]->read_pos to %d\n",fd, offset);
-	fd_table[fd]->read_pos += offset;
+	fd_table[fd]->read_pos = offset;
 	return 0;
 }
 
