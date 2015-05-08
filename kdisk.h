@@ -89,7 +89,8 @@ struct Ramdisk {
 };
 
 struct FileDesc {
-	int position;
+	int read_pos;
+	int write_pos;
 	struct Inode* inode;
 };
 
@@ -109,7 +110,6 @@ int rd_close(int fd);
 int rd_read(int fd, char *address, int num_bytes);
 int read_from_block(struct Inode *inode, union Block *block, char *buf, int count, int block_num, int *fd_pos);
 int rd_write(int fd, char *address, int num_bytes);
-void write_to_block(struct Inode *inode, union Block *block, char *data, int count);
 int rd_lseek(int fd, int offset);
 int rd_unlink(char *pathname);
 int rd_readdir(int fd, char *address);

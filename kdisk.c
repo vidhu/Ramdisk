@@ -57,6 +57,8 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 			//Read data
 			result = rd_read(params.fd, data_address, params.count);
 
+			printk("Bytes read: %d\n", result);
+
 			//Check if successfull
 			if(params.count != result){
 				result = -1;
@@ -213,7 +215,8 @@ int rd_open(char *pathname){
 
 	//Create new file Descriptor
 	struct FileDesc* fd = (struct FileDesc*) kmalloc(sizeof(struct FileDesc), GFP_KERNEL);
-	fd->position = 0;
+	fd->read_pos = 0;
+	fd->write_pos = 0;
 	fd->inode = &(disk->inode[inode_index]);
 
 	//Insert file descriptor into fd table
@@ -245,109 +248,119 @@ int rd_close(int fd){
 }
 
 int rd_read(int fd, char *address, int num_bytes){
-	printk("==RD_READ========================\n");
+	printk("==RD_READ=======================\n");
 	printk("Need to read '%d bytes' from inode '%d' into address: 0x%p\n", num_bytes, fd, address);
-	
-	int bytes_read = 0;
-	int *fd_position = &(fd_table[fd]->position);
-	printk("fd_table[%d]->position is: %d\n", fd, fd_table[fd]->position);
+	printk("fd_table[%d]->position is: %d\n", fd, fd_table[fd]->read_pos);
 
+	//Error checking
+	if(fd_table[fd] == NULL)
+		return -1; // Non-existant is hasn't been open yet
+	
+	if(!strncmp(fd_table[fd]->inode->type,"dir",3))
+		return -1; //This is a directory file
+
+	int bytes_read= 0;									//For tracking *address
+	int offset = 0;
+	int bytes_left = num_bytes;							//For writting loops
+	int start_block;
 	struct Inode *inode = &disk->inode[fd];
-	//Return if file descriptor position is greater than file size
-	if(inode->size <= *fd_position)
-		return 0;
+	
+	printk("Reading from direct block pointer\n");
+	
+	//Blocks 0...7
+	start_block = (fd_table[fd]->read_pos/256) % 4168;
+	for(int i=start_block; i<8; i++){
+		//Check if block is allocated or not. If not, return -1
+		if(inode->location[i] == NULL) return -1;
 
-	//Calculate position to start reading from
-	int inode_block_num = (*fd_position)/256;
+		//Calculate offset
+		offset = bytes_left < 256 ? fd_table[fd]->read_pos % 256 : 0;
 
-	//Start reading from calculated of set
-	for(int i=inode_block_num; i<8; i++){
-		//Check if block is allocated or not. If not, then there is no content
-		if(inode->location[i] == NULL)
-			return -1;
+		//Write data
+		printk("Reading from inode.location[%d] into addr: %p\n", i, inode->location[i]);
+		union Block *block = inode->location[i];
+		for(int j=offset; (j<256) && (j<(bytes_left+offset)); j++){
+			printk("block[%d] byte[%d]\n", i, j);
+			address[bytes_read] = block->file.byte[j];
 
-		printk("Reading from inode.location[%d] at addr: %p\n", i, inode->location[i]);
-		bytes_read += read_from_block(inode, inode->location[i], address+(256*i), num_bytes, i, fd_position);
-		printk("Bytes read: %d\n", bytes_read);
-		if((bytes_read == num_bytes) || (*fd_position) == inode->size){
-			(*fd_position) = 0;
+			bytes_read++;
+			fd_table[fd]->read_pos++;
+
+			//Return if all data has been read
+			if((bytes_left <= 0) || fd_table[fd]->read_pos >= inode->size) return bytes_read;
+		}
+		bytes_left = num_bytes - bytes_read;
+	}
+	
+	printk("Reading from single indirect block pointer\n");
+
+	//Blocks 8...71
+	if(inode->location[8] == NULL) inode->location[8] = allocate_block();
+	start_block = (fd_table[fd]->read_pos/256) % 4168;
+	for(int i=start_block-8; i<64; i++){
+		//Check if block is allocated or not. If not, allocate it a block
+		if(inode->location[8]->ptr.loc[i] == NULL) inode->location[8]->ptr.loc[i] = allocate_block();
+
+		//Calculate offset
+		offset = bytes_left < 256 ? fd_table[fd]->read_pos % 256 : 0;
+
+		//Write data
+		union Block *block = inode->location[8]->ptr.loc[i];
+		for(int j=offset; (j<256) && (j<(bytes_left+offset)); j++){
+			printk("block[%d] byte[%d]\n", i, j);
+			address[bytes_read] = block->file.byte[j];
 			
-			printk("=================================\n");
-			return bytes_read;
+			bytes_read++;
+			fd_table[fd]->read_pos++;
+
+			//Return if all data has been read
+			if((bytes_left <= 0) || fd_table[fd]->read_pos >= inode->size) return bytes_read;
+		}
+
+		bytes_left = num_bytes - bytes_read;
+		printk("Left: %d\n", bytes_left);
+	}
+	
+	printk("Reading in double indirect block pointer\n");
+	
+	//Blocks 72...4167
+	if(inode->location[9] == NULL) inode->location[9] = allocate_block();
+	start_block = (fd_table[fd]->read_pos/256) % 4168;
+	for(int i=(start_block-72)/64; i<64; i++){			//0-63
+
+		//Check if block is allocated or not. If not, allocate it a block
+		if(inode->location[9]->ptr.loc[i] == NULL) inode->location[9]->ptr.loc[i] = allocate_block();
+
+		for(int j=(start_block-72)%64; j<64; j++){		//0-63
+			//Check if block is allocated or not. If not, allocate it a block
+			if(inode->location[9]->ptr.loc[i]->ptr.loc[j] == NULL) inode->location[9]->ptr.loc[i]->ptr.loc[j] = allocate_block();
+
+			//Calculate offset
+			offset = bytes_left < 256 ? fd_table[fd]->read_pos % 256 : 0;
+
+			//Read data
+			union Block *block = inode->location[9]->ptr.loc[i]->ptr.loc[j];
+			for(int k=offset; (k<256) && (k<(bytes_left+offset)); k++){
+				address[bytes_read] = block->file.byte[k];
+
+				bytes_read++;
+				fd_table[fd]->read_pos++;
+
+				//Return if all data has been read
+				if((bytes_left <= 0) || fd_table[fd]->read_pos > inode->size){
+					printk("hum....  %d\n", inode->size);
+					return bytes_read;	
+				} 
+			}
+
+			bytes_left = num_bytes - bytes_read;
+			printk("Left: %d\n", bytes_left);
 		}
 	}
 	
-	//Try reading in single indirect block pointer
-	inode_block_num = (*fd_position)/256;
-	for(int i=(inode_block_num-8); i<64; i++){
-		//Check if block is allocated or not. If not, then there is no content
-		if(inode->location[8]->ptr.loc[i] == NULL)
-			return -1;
-
-		//printk("Reading from inode.location[8]->ptr.loc[%d] at addr: %p\n", i, inode->location[8]->ptr.loc[i]);
-		bytes_read += read_from_block(inode, inode->location[8]->ptr.loc[i], address+(256*(i+8)), num_bytes, (i+8), fd_position);
-		//printk("Bytes read: %d\n", bytes_read);
-		if((bytes_read == num_bytes) || (*fd_position) == inode->size){
-			(*fd_position) = 0;
-			
-			printk("=================================\n");
-			return bytes_read;
-		}
-	}
-
-	//Try reading in double indirect block pointer
-	inode_block_num = (*fd_position)/256;
-	for(int i=0; i<64; i++){
-		//Check if block is allocated or not. If not, then there is no content
-		if(inode->location[8]->ptr.loc[i] == NULL)
-			return -1;
-
-		for(int j=0; j<64; j++){
-			if(inode->location[8]->ptr.loc[i]->ptr.loc[j] == NULL)
-				return -1;
-
-			//printk("Reading from inode.location[9]->ptr.loc[%d]->ptr.loc[%d] at addr: %p\n", i, j, 
-			//	inode->location[8]->ptr.loc[i]->ptr.loc[j]);
-
-			bytes_read += read_from_block(inode, inode->location[9]->ptr.loc[i]->ptr.loc[j],
-						address+(256*(8+64+(i*j))), num_bytes, 8+64+(i*j), fd_position);
-
-			//printk("Bytes read: %d\n", bytes_read);
-			if((bytes_read == num_bytes) || (*fd_position) == inode->size){
-				(*fd_position) = 0;
-				
-				printk("=================================\n");
-				return bytes_read;
-			}
-		}
-	}
-
-	return -1;
-}
-
-int read_from_block(struct Inode *inode, union Block *b, char *buf, int count, int block_num, int *fd_pos){
-	int bytes_read = 0;
-	int j = 0;
-	if(*fd_pos < (block_num*256)){
-		j = *fd_pos % 256;
-	}
-	for(; j<count && j < 256; j++){
-
-		//Debuging
-		//printk("\t%d Reading char byte[%d]: %c\n",j ,*fd_pos ,b->file.byte[(*fd_pos) % 256]);
-
-		//Read data
-		buf[j] = b->file.byte[(*fd_pos) % 256];
-
-		//Update fd and bytes_read
-		(*fd_pos)++;
-		bytes_read++;
-
-		//Return if read num_bytes or reached end of file
-		if((*fd_pos) == inode->size) return bytes_read;
-	}
-
+	//Return if all data has been read
 	return bytes_read;
+
 }
 
 int rd_write(int fd, char *address, int num_bytes){
@@ -362,120 +375,116 @@ int rd_write(int fd, char *address, int num_bytes){
 	if(!strncmp(fd_table[fd]->inode->type,"dir",3))
 		return -1; //This is a directory file
 
-
-	int bytes_written = 0;
-	int bytes_left = num_bytes;
-
+	int bytes_written = 0;								//For tracking *address
+	int offset = 0;
+	int bytes_left = num_bytes;							//For writting loops
+	int start_block;
 	struct Inode *inode = &disk->inode[fd];
-
-	//Write to first 8 block pointers
-	for(int i=0; i<8; i++){
+	
+	printk("Writting in direct block pointer\n");
+	
+	//Blocks 0...7
+	start_block = (fd_table[fd]->write_pos/256) % 4168;
+	for(int i=start_block; i<8; i++){
 		//Check if block is allocated or not. If not, allocate it a block
-		if(inode->location[i] == NULL)
-			inode->location[i] = allocate_block();
-		//printk("Writting to inode.location[%d] at addr: %p\n", i, inode->location[i]);
+		if(inode->location[i] == NULL) inode->location[i] = allocate_block();
 
-		//Calculate how much data to write
-		int tmp = 256;
-		if(bytes_left < 256) tmp = bytes_left;
+		//Calculate offset
+		offset = bytes_left < 256 ? fd_table[fd]->write_pos % 256 : 0;
 
 		//Write data
-		write_to_block(inode, inode->location[i], address+(256*i), tmp);
+		printk("Writting to inode.location[%d] at addr: %p\n", i, inode->location[i]);
+		union Block *block = inode->location[i];
+		for(int j=offset; (j<256) && (j<(bytes_left+offset)); j++){
+			block->file.byte[j] = address[bytes_written];
 
-		//Update trackers
-		bytes_written += tmp;
-		bytes_left -= tmp;
-
-		//stop if done
-		if(bytes_left == 0){
-			printk("Bytes Written: %d\n", bytes_written);
-			printk("=================================\n");
-			return bytes_written;
+			bytes_written++;
+			fd_table[fd]->write_pos++;
 		}
+		bytes_left = num_bytes - bytes_written;
+		inode->size += bytes_written;
+		printk("Size:%d\n", inode->size);
+		printk("Left: %d\n", bytes_left);
+
+		//Return if all data has been written
+		if(bytes_left <= 0) return bytes_written;
 	}
 
-	//Write to 9th single indirect block pointer
-	//Check if block is allocated or not. If not, allocate it a block
-	if(inode->location[8] == NULL)
-		inode->location[8] = allocate_block();
-	for(int i=0; i<64; i++){
-		//Check if block is allocated or not. If not, allocate it a block
-		if(inode->location[8]->ptr.loc[i] == NULL)
-			inode->location[8]->ptr.loc[i] = allocate_block();
-		//printk("Writting to inode.location[8]->ptr.loc[%d] at addr: %p\n", i, inode->location[8]->ptr.loc);
+	printk("Writting in single indirect block pointer\n");
 
-		//Calculate how much data to write
-		int tmp = 256;
-		if(bytes_left < 256) tmp = bytes_left;
+	//Blocks 8...71
+	if(inode->location[8] == NULL) inode->location[8] = allocate_block();
+	start_block = (fd_table[fd]->write_pos/256) % 4168;
+	for(int i=start_block-8; i<64; i++){
+		//Check if block is allocated or not. If not, allocate it a block
+		if(inode->location[8]->ptr.loc[i] == NULL) inode->location[8]->ptr.loc[i] = allocate_block();
+
+		//Calculate offset
+		offset = bytes_left < 256 ? fd_table[fd]->write_pos % 256 : 0;
 
 		//Write data
-		write_to_block(inode, inode->location[8]->ptr.loc[i], address+(2048)+(256*i), tmp);
-
-		//Update trackers
-		bytes_written += tmp;
-		bytes_left -= tmp;
-
-		//stop if done
-		if(bytes_left == 0){
-			printk("Bytes Written: %d\n", bytes_written);
-			printk("=================================\n");
-			return bytes_written;
+		union Block *block = inode->location[8]->ptr.loc[i];
+		for(int j=offset; (j<256) && (j<(bytes_left+offset)); j++){
+			block->file.byte[j] = address[bytes_written];
+			
+			bytes_written++;
+			fd_table[fd]->write_pos++;
 		}
+
+		bytes_left = num_bytes - bytes_written;
+		inode->size += bytes_written;
+		printk("Size:%d\n", inode->size);
+		printk("Left: %d\n", bytes_left);
+
+		//Return if all data has been written
+		if(bytes_left <= 0) return bytes_written;
 	}
 	
-	//Write to 10th double indirect block poiner
-	//Check if block is allocated or not. If not, allocate it a block
-	if(inode->location[9] == NULL)
-		inode->location[9] = allocate_block();
-	for(int i=0; i<64; i++){
-		//Check if block is allocated or not. If not, allocate it a block
-		if(inode->location[9]->ptr.loc[i] == NULL)
-			inode->location[9]->ptr.loc[i] = allocate_block();
-		for(int j=0; j<64; j++){
-			if(inode->location[9]->ptr.loc[i]->ptr.loc[j] == NULL)
-				inode->location[9]->ptr.loc[i]->ptr.loc[j] = allocate_block();
-			//printk("Writting to inode.location[9]->ptr.loc[%d]->ptr.loc[%d] at addr: %p\n", i, j, 
-				//inode->location[9]->ptr.loc[i]->ptr.loc[j]);
+	printk("Writting in double indirect block pointer\n");
+	
+	//Blocks 72...4167
+	if(inode->location[9] == NULL) inode->location[9] = allocate_block();
+	start_block = (fd_table[fd]->write_pos/256) % 4168;
+	for(int i=(start_block-72)/64; i<64; i++){			//0-63
 
-			//Calculate how much data to write
-			int tmp = 256;
-			if(bytes_left < 256) tmp = bytes_left;
+		//Check if block is allocated or not. If not, allocate it a block
+		if(inode->location[9]->ptr.loc[i] == NULL) inode->location[9]->ptr.loc[i] = allocate_block();
+
+		for(int j=(start_block-72)%64; j<64; j++){		//0-63
+			//Check if block is allocated or not. If not, allocate it a block
+			if(inode->location[9]->ptr.loc[i]->ptr.loc[j] == NULL) inode->location[9]->ptr.loc[i]->ptr.loc[j] = allocate_block();
+
+			//Calculate offset
+			offset = bytes_left < 256 ? fd_table[fd]->write_pos % 256 : 0;
 
 			//Write data
-			write_to_block(inode, inode->location[9]->ptr.loc[i]->ptr.loc[j], address+18432+(i*j*256), tmp);
+			union Block *block = inode->location[9]->ptr.loc[i]->ptr.loc[j];
+			for(int k=offset; (k<256) && (k<(bytes_left+offset)); k++){
+				block->file.byte[k] = address[bytes_written];
 
-			//Update trackers
-			bytes_written += tmp;
-			bytes_left -= tmp;
-
-			//stop if done
-			if(bytes_left == 0){
-				printk("Bytes Written: %d\n", bytes_written);
-				printk("=================================\n");
-				return bytes_written;
+				bytes_written++;
+				fd_table[fd]->write_pos++;
 			}
+
+			bytes_left = num_bytes - bytes_written;
+			inode->size += bytes_written;
+			printk("Size:%d\n", inode->size);
+			printk("Left: %d\n", bytes_left);
+
+			//Return if all data has been written
+			if(bytes_left <= 0) return bytes_written;
 		}
 	}
 	
-	return -1;
+	//Return if all data has been written
+	return bytes_written;
+
 }
 
-void write_to_block(struct Inode *inode, union Block *block, char *data, int count){
-	for(int j=0; j<count; j++){
-		//Debugging
-		//printk("\tWritting char: %c\n", data[j]);
-
-		//Write data
-		block->file.byte[j] = data[j];
-
-		//Increament file size
-		inode->size++;
-	}
-}
 
 int rd_lseek(int fd, int offset){
-	printk("Moving fd_table[%d]->position to %d\n",fd, offset);
-	fd_table[fd]->position += offset;
+	printk("Moving fd_table[%d]->read_pos to %d\n",fd, offset);
+	fd_table[fd]->read_pos += offset;
 	return 0;
 }
 
@@ -527,15 +536,15 @@ int rd_readdir(int fd, char *address){
 	printk("Dir is open\n");
 	struct Inode *inode = fd_table[fd]->inode;
 
-	int block_num_start = (fd_table[fd]->position) / 16;
-	int dir_num_start = (fd_table[fd]->position) % 16;
+	int block_num_start = (fd_table[fd]->read_pos) / 16;
+	int dir_num_start = (fd_table[fd]->read_pos) % 16;
 
 	for(int i=block_num_start; i<8; i++){
 		if(inode->location[i] == 0)
 			continue;
 		printk("Reading entry in inode block location '%d'\n", i);
 		for(int j=dir_num_start; j<16; j++){
-			fd_table[fd]->position++;
+			fd_table[fd]->read_pos++;
 			if(inode->location[i]->dir.entry[j].filename[0] == 0)
 				continue;
 			printk("Found entry: %.14s\n", inode->location[i]->dir.entry[j].filename);
