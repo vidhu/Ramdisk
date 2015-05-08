@@ -17,7 +17,7 @@
 #define RD_READDIR _IOWR('G', 8, struct Params) //param ds
 
 
-#define N 10
+#define N 1067008
 
 
 struct Params {
@@ -47,18 +47,18 @@ int main(){
     struct Params p1 = {
     	.fd = rdfd,
     	.addr = msg_write,
-    	.count = 5
+    	.count = N
     };
     ioctl(fd, RD_WRITE, &p1);
-    p1.addr = msg_write2;
-    ioctl(fd, RD_WRITE, &p1);
+    //p1.addr = msg_write2;
+    //ioctl(fd, RD_WRITE, &p1);
     
     //LSeek
-    struct Params p3 = {
-    	.fd = rdfd,
-    	.count = N-8
-    };
-    ioctl(fd, RD_LSEEK, &p3);
+    //struct Params p3 = {
+    //	.fd = rdfd,
+    //	.count = 4
+    //};
+    //ioctl(fd, RD_LSEEK, &p3);
 
     //Read data
     char* msg_read = malloc(sizeof(char)*N);
@@ -66,7 +66,7 @@ int main(){
     struct Params p2 = {
     	.fd = rdfd,
     	.addr = msg_read,
-    	.count = 8
+    	.count = 5
     };
     ioctl(fd, RD_READ, &p2);
 

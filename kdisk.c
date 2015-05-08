@@ -251,7 +251,7 @@ int rd_read(int fd, char *address, int num_bytes){
 	printk("==RD_READ=======================\n");
 	printk("Need to read '%d bytes' from inode '%d' into address: 0x%p\n", num_bytes, fd, address);
 	printk("fd_table[%d]->position is: %d\n", fd, fd_table[fd]->read_pos);
-
+	printk("File size is: %d\n", fd_table[fd]->inode->size);
 	//Error checking
 	if(fd_table[fd] == NULL)
 		return -1; // Non-existant is hasn't been open yet
@@ -276,7 +276,7 @@ int rd_read(int fd, char *address, int num_bytes){
 		//Calculate offset
 		offset = bytes_left < 256 ? fd_table[fd]->read_pos % 256 : 0;
 
-		//Write data
+		//Read data
 		printk("Reading from inode.location[%d] into addr: %p\n", i, inode->location[i]);
 		union Block *block = inode->location[i];
 		for(int j=offset; (j<256) && (j<(bytes_left+offset)); j++){
@@ -287,7 +287,7 @@ int rd_read(int fd, char *address, int num_bytes){
 			fd_table[fd]->read_pos++;
 
 			//Return if all data has been read
-			if((bytes_left <= 0) || fd_table[fd]->read_pos >= inode->size) return bytes_read;
+			if((num_bytes <= bytes_read)) return bytes_read;
 		}
 		bytes_left = num_bytes - bytes_read;
 	}
@@ -314,7 +314,7 @@ int rd_read(int fd, char *address, int num_bytes){
 			fd_table[fd]->read_pos++;
 
 			//Return if all data has been read
-			if((bytes_left <= 0) || fd_table[fd]->read_pos >= inode->size) return bytes_read;
+			if((num_bytes <= bytes_read)) return bytes_read;
 		}
 
 		bytes_left = num_bytes - bytes_read;
@@ -347,10 +347,7 @@ int rd_read(int fd, char *address, int num_bytes){
 				fd_table[fd]->read_pos++;
 
 				//Return if all data has been read
-				if((bytes_left <= 0) || fd_table[fd]->read_pos > inode->size){
-					printk("hum....  %d\n", inode->size);
-					return bytes_read;	
-				} 
+				if((num_bytes <= bytes_read)) return bytes_read;
 			}
 
 			bytes_left = num_bytes - bytes_read;
@@ -398,13 +395,14 @@ int rd_write(int fd, char *address, int num_bytes){
 		for(int j=offset; (j<256) && (j<(bytes_left+offset)); j++){
 			block->file.byte[j] = address[bytes_written];
 
+			//inode->size++;
 			bytes_written++;
 			fd_table[fd]->write_pos++;
 		}
 		bytes_left = num_bytes - bytes_written;
-		inode->size += bytes_written;
-		printk("Size:%d\n", inode->size);
-		printk("Left: %d\n", bytes_left);
+		
+		//printk("Size:%d\n", inode->size);
+		//printk("Left: %d\n", bytes_left);
 
 		//Return if all data has been written
 		if(bytes_left <= 0) return bytes_written;
@@ -426,15 +424,15 @@ int rd_write(int fd, char *address, int num_bytes){
 		union Block *block = inode->location[8]->ptr.loc[i];
 		for(int j=offset; (j<256) && (j<(bytes_left+offset)); j++){
 			block->file.byte[j] = address[bytes_written];
-			
+
+			//inode->size++;			
 			bytes_written++;
 			fd_table[fd]->write_pos++;
 		}
 
 		bytes_left = num_bytes - bytes_written;
-		inode->size += bytes_written;
-		printk("Size:%d\n", inode->size);
-		printk("Left: %d\n", bytes_left);
+		//printk("Size:%d\n", inode->size);
+		//printk("Left: %d\n", bytes_left);
 
 		//Return if all data has been written
 		if(bytes_left <= 0) return bytes_written;
@@ -462,14 +460,14 @@ int rd_write(int fd, char *address, int num_bytes){
 			for(int k=offset; (k<256) && (k<(bytes_left+offset)); k++){
 				block->file.byte[k] = address[bytes_written];
 
+				//inode->size++;
 				bytes_written++;
 				fd_table[fd]->write_pos++;
 			}
 
 			bytes_left = num_bytes - bytes_written;
-			inode->size += bytes_written;
-			printk("Size:%d\n", inode->size);
-			printk("Left: %d\n", bytes_left);
+			//printk("Size:%d\n", inode->size);
+			//printk("Left: %d\n", bytes_left);
 
 			//Return if all data has been written
 			if(bytes_left <= 0) return bytes_written;
