@@ -91,8 +91,8 @@ int main () {
 
   /* Some arbitrary data for our files */
   memset (data1, '1', sizeof (data1));
-  memset (data2, '2', sizeof (data1));
-  memset (data3, '3', sizeof (data1));
+  memset (data2, '2', sizeof (data2));
+  memset (data3, '3', sizeof (data3));
 
 
 #ifdef TEST1
