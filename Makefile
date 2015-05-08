@@ -6,20 +6,13 @@ all: user
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
 user: ioctl_test.c
 	gcc -std=gnu99 -m32 ioctl_test.c -o ioctl_test
-<<<<<<< HEAD
 	gcc -std=gnu99 -m32 api.c test.c -o test
-=======
-	#gcc -std=gnu99 -m32 api.c test.c -o test
->>>>>>> dev
+
 
 .PHONY: in
 in: kdisk.ko
 	insmod kdisk.ko
-<<<<<<< HEAD
-	
-=======
 
->>>>>>> dev
 .PHONY: test
 test: 
 	make all
