@@ -367,6 +367,7 @@ int rd_write(int fd, char *address, int num_bytes){
 	int start_block;
 	struct Inode *inode = &disk->inode[fd];
 	
+	printk("Writting in direct block pointer\n");
 	
 	//Blocks 0...7
 	start_block = (fd_table[fd]->write_pos/256) % 4168;
@@ -390,7 +391,7 @@ int rd_write(int fd, char *address, int num_bytes){
 		if(bytes_left <= 0) return bytes_written;
 	}
 
-	
+	printk("Writting in single indirect block pointer\n");
 
 	//Blocks 8...71
 	if(inode->location[8] == NULL) inode->location[8] = allocate_block();
@@ -415,10 +416,11 @@ int rd_write(int fd, char *address, int num_bytes){
 		if(bytes_left <= 0) return bytes_written;
 	}
 	
-
-	return 0;
+	printk("Writting in double indirect block pointer\n");
+	
 	//Blocks 72...4167
-	start_block = fd_table[fd]->write_pos % 4168;
+	if(inode->location[9] == NULL) inode->location[9] = allocate_block();
+	start_block = (fd_table[fd]->write_pos/256) % 4168;
 	for(int i=(start_block-72)/64; i<64; i++){			//0-63
 
 		//Check if block is allocated or not. If not, allocate it a block
@@ -429,13 +431,19 @@ int rd_write(int fd, char *address, int num_bytes){
 			if(inode->location[9]->ptr.loc[i]->ptr.loc[j] == NULL) inode->location[9]->ptr.loc[i]->ptr.loc[j] = allocate_block();
 
 			//Write data
-			union Block *block = inode->location[8]->ptr.loc[i]->ptr.loc[j];
+			union Block *block = inode->location[9]->ptr.loc[i]->ptr.loc[j];
 			for(int k=0; (k<256) && (k<bytes_left); k++){
 				block->file.byte[k] = address[bytes_written];
+
 				bytes_written++;
-				bytes_left--;
 				fd_table[fd]->write_pos++;
 			}
+
+			bytes_left = num_bytes - bytes_written;
+			printk("Left: %d\n", bytes_left);
+
+			//Return if all data has been written
+			if(bytes_left <= 0) return bytes_written;
 		}
 	}
 	

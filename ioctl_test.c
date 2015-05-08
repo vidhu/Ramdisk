@@ -16,7 +16,7 @@
 #define RD_UNLINK _IOR('G', 7, char *)
 #define RD_READDIR _IOWR('G', 8, struct Params) //param ds
 
-#define N 18432
+#define N 1067008
 
 struct Params {
 	int fd;
@@ -36,6 +36,7 @@ int main(){
     ioctl(fd, RD_CREAT, "/file1");
     int rdfd = ioctl(fd, RD_OPEN, "/file1");
 
+    //Write data
     char* msg = malloc(sizeof(char)*N);
     memset(msg, '\0', sizeof(char)*N);
     memset(msg, '1', (sizeof(char)*N)-1);
