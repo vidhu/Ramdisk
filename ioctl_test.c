@@ -32,11 +32,19 @@ int main(){
     }
 
     char pathname[80];
+
+    //Create files
     for(int i=0; i<1024; i++){
     	sprintf (pathname, "/file%d", i);
     	ioctl(fd, RD_CREAT, pathname);
 	}
 
+	//Delete files
+	for(int i=0; i<1023; i++){
+		sprintf (pathname, "/file%d", i);
+		ioctl(fd, RD_UNLINK, pathname);
+	}
+	
 
     if ((fd = close(fd)) < 0) {
         perror("close");

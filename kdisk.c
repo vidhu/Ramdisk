@@ -661,8 +661,6 @@ int get_inode_number_helper(int index, char *dir_name){
 int insert_Inode(int parent, int child, char *fileName){
 	printk("\t\tInserting '%s' at inode %d in parent with inode %d\n", fileName, child, parent);
 
-	
-
 	//Within the first 8 direct block pointers
 	for(int i=0;i<8;i++){
 		union Block *b = disk->inode[parent].location[i];
@@ -704,10 +702,28 @@ int insert_Inode(int parent, int child, char *fileName){
 int delete_Inode(int parent, int child){
 	printk("\t\tDeleting inode '%d' in parent with inode %d\n",child, parent);
 
-	union Block *b;
+	//Within the first 8 direct block pointers
 	for(int i=0; i<8; i++){
-		b = disk->inode[parent].location[i];
+		union Block *b = disk->inode[parent].location[i];
 		if(b != 0){
+			for(int j=0; j<16; j++){
+				if(b->dir.entry[j].inode_number == child){
+					memset(&(b->dir.entry[j]), 0, 16); //remove entry from parent
+					memset(&(disk->inode[child]), 0, 64); //free inode
+					disk->superBlock.freeInode++;
+					printk("\t\tDeleted inode\n");
+					return 0;
+				}
+			}
+		}
+	}
+
+	if(disk->inode[parent].location[8] == NULL) return -1;
+
+	//In the 9 single indirect block pointer
+	for(int i=0; i<64; i++){
+		union Block *b = disk->inode[parent].location[8]->ptr.loc[i];
+		if(b != NULL){
 			for(int j=0; j<16; j++){
 				if(b->dir.entry[j].inode_number == child){
 					memset(&(b->dir.entry[j]), 0, 16); //remove entry from parent
