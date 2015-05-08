@@ -453,18 +453,6 @@ int rd_write(int fd, char *address, int num_bytes){
 	return -1;
 }
 
-void write_to_block(struct Inode *inode, union Block *block, char *data, int count){
-	for(int j=0; j<count; j++){
-		//Debugging
-		//printk("\tWritting char: %c\n", data[j]);
-
-		//Write data
-		block->file.byte[j] = data[j];
-
-		//Increament file size
-		inode->size++;
-	}
-}
 
 int rd_lseek(int fd, int offset){
 	printk("Moving fd_table[%d]->position to %d\n",fd, offset);
