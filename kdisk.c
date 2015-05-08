@@ -82,6 +82,8 @@ static long procfile_ioctl(struct file *f, unsigned int cmd, unsigned long arg){
 			//Write data
 			result = rd_write(params.fd, data_address, params.count);
 			
+			printk("Bytes wrote: %d\n", result);
+
 			//Check if successfull
 			if(params.count != result){
 				result = -1;
@@ -364,7 +366,9 @@ int rd_write(int fd, char *address, int num_bytes){
 	printk("==RD_WRITE=======================\n");
 	printk("Need to write '%d bytes' into inode '%d' from address: 0x%p\n", num_bytes, fd, address);
 	printk("Address '0x%p' contains: %s\n", address, address);
-
+	printk("fd_table[%d]->position is: %d\n", fd, fd_table[fd]->write_pos);
+	printk("File size is: %d\n", fd_table[fd]->inode->size);
+	
 	//Error checking
 	if(fd_table[fd] == NULL)
 		return -1; // Non-existant is hasn't been open yet
@@ -382,6 +386,7 @@ int rd_write(int fd, char *address, int num_bytes){
 	
 	//Blocks 0...7
 	start_block = (fd_table[fd]->write_pos/256) % 4168;
+	printk("==> %d\n", start_block);
 	for(int i=start_block; i<8; i++){
 		//Check if block is allocated or not. If not, allocate it a block
 		if(inode->location[i] == NULL) inode->location[i] = allocate_block();
@@ -395,7 +400,7 @@ int rd_write(int fd, char *address, int num_bytes){
 		for(int j=offset; (j<256) && (j<(bytes_left+offset)); j++){
 			block->file.byte[j] = address[bytes_written];
 
-			//inode->size++;
+			inode->size += 1;
 			bytes_written++;
 			fd_table[fd]->write_pos++;
 		}
@@ -425,7 +430,7 @@ int rd_write(int fd, char *address, int num_bytes){
 		for(int j=offset; (j<256) && (j<(bytes_left+offset)); j++){
 			block->file.byte[j] = address[bytes_written];
 
-			//inode->size++;			
+			inode->size += 1;			
 			bytes_written++;
 			fd_table[fd]->write_pos++;
 		}
@@ -460,7 +465,7 @@ int rd_write(int fd, char *address, int num_bytes){
 			for(int k=offset; (k<256) && (k<(bytes_left+offset)); k++){
 				block->file.byte[k] = address[bytes_written];
 
-				//inode->size++;
+				inode->size += 1;
 				bytes_written++;
 				fd_table[fd]->write_pos++;
 			}
