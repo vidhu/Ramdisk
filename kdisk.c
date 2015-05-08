@@ -590,8 +590,6 @@ int find_free_inode(){
 //Returns the inode index of the provided path
 int get_inode_number(char* pathname){
 	printk("\t\tGetting inode for: %s\n", pathname);
-	if(disk->superBlock.freeInode == 0)
-		return -1;
 	if(pathname[0] != '/')
 		return -1;
 	if(strlen(pathname) == 1)
@@ -638,16 +636,16 @@ int get_inode_number_helper(int index, char *dir_name){
 	}
 	
 	//Check in 9th single indirect block pointer
-	if(inode->location[9] == 0) return -1;
+	if(inode->location[8] == NULL) return -1;
 	for(int i=0; i<64; i++){
-		union Block *b = inode->location[9]->ptr.loc[i];
+		union Block *b = inode->location[8]->ptr.loc[i];
 		//Search for entires in the block
 		if(b != 0){
 			for(int j=0; j<16; j++){
 				//Some entry in this...?
 				if(b->dir.entry[j].filename[0] != 0){
-					//if(!strncmp(b->dir.entry[j].filename, dir_name, 14))
-					//	return b->dir.entry[j].inode_number;
+					if(!strncmp(b->dir.entry[j].filename, dir_name, 14))
+						return b->dir.entry[j].inode_number;
 				}
 			}
 		}
@@ -663,11 +661,11 @@ int get_inode_number_helper(int index, char *dir_name){
 int insert_Inode(int parent, int child, char *fileName){
 	printk("\t\tInserting '%s' at inode %d in parent with inode %d\n", fileName, child, parent);
 
-	union Block *b;
+	
 
 	//Within the first 8 direct block pointers
 	for(int i=0;i<8;i++){
-		b = disk->inode[parent].location[i];
+		union Block *b = disk->inode[parent].location[i];
 		//Allocate new block
 		if(b == 0){
 			disk->inode[parent].location[i] = allocate_block();
@@ -683,30 +681,23 @@ int insert_Inode(int parent, int child, char *fileName){
 	}
 
 	//In the 9 single indirect block pointer
-	union Block *block_ptr = disk->inode[parent].location[9];
-	if(block_ptr == 0){
-		disk->inode[parent].location[9] = allocate_block();
-		block_ptr = disk->inode[parent].location[9];
-	}
-	for(int i=0; i<64; i++){	
-		b = block_ptr->ptr.loc[i];
-		//Allocate new block
-		if(b == 0){
-			printk("===> %d\n", b == 0);
-			block_ptr->ptr.loc[i] = allocate_block();
-			b = block_ptr->ptr.loc[i];
-			printk("===> %p\n", b);
-		}
-		
+	if(disk->inode[parent].location[8] == NULL) disk->inode[parent].location[8] = allocate_block();
+
+	for(int i=0; i<64; i++){
+		if(disk->inode[parent].location[8]->ptr.loc[i] == NULL)
+			disk->inode[parent].location[8]->ptr.loc[i] = allocate_block();
+
+		union Block *b = disk->inode[parent].location[8]->ptr.loc[i];
 		for(int j=0; j<16; j++){
 			if(b->dir.entry[j].filename[0] == 0){ //found a free area
 				strncpy(b->dir.entry[j].filename, fileName, 13); //truncate any long strings
 				b->dir.entry[j].inode_number = child;
+				printk("Inserted\n");
 				return 0;
 			}
 		}
-
 	}
+
 	return -1;
 }
 

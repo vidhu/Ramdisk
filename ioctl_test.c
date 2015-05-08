@@ -16,7 +16,7 @@
 #define RD_UNLINK _IOR('G', 7, char *)
 #define RD_READDIR _IOWR('G', 8, struct Params) //param ds
 
-#define N 2
+#define N 1024
 
 struct Params {
 	int fd;
@@ -31,7 +31,12 @@ int main(){
         return -1;
     }
 
-    
+    char pathname[80];
+    for(int i=0; i<1024; i++){
+    	sprintf (pathname, "/file%d", i);
+    	ioctl(fd, RD_CREAT, pathname);
+	}
+
 
     if ((fd = close(fd)) < 0) {
         perror("close");

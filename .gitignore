@@ -39,3 +39,4 @@ modules.order
 
 *.sublime-project
 *.sublime-workspace
+test

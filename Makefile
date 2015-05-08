@@ -11,7 +11,8 @@ user: ioctl_test.c
 .PHONY: in
 in: kdisk.ko
 	insmod kdisk.ko
-
+	
+.PHONY: test
 test: 
 	make all
 	make in

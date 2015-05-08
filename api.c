@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <unistd.h>
 #include <sys/ioctl.h>
 #include <stdlib.h>
 #include "api.h"
