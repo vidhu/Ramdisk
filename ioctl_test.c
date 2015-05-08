@@ -16,7 +16,7 @@
 #define RD_UNLINK _IOR('G', 7, char *)
 #define RD_READDIR _IOWR('G', 8, struct Params) //param ds
 
-#define N 2
+#define N 18432
 
 struct Params {
 	int fd;
@@ -30,6 +30,27 @@ int main(){
         perror("open");
         return -1;
     }
+
+
+    //Create and open file
+    ioctl(fd, RD_CREAT, "/file1");
+    int rdfd = ioctl(fd, RD_OPEN, "/file1");
+
+    char* msg = malloc(sizeof(char)*N);
+    memset(msg, '\0', sizeof(char)*N);
+    memset(msg, '1', (sizeof(char)*N)-1);
+
+    struct Params p1 = {
+    	.fd = rdfd,
+    	.addr = msg,
+    	.count = N
+    };
+    ioctl(fd, RD_WRITE, &p1);
+    
+
+    //Close and Delete file
+    ioctl(fd, RD_CLOSE, rdfd);
+    ioctl(fd, RD_UNLINK, "/file1");
 
 
 

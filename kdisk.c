@@ -362,101 +362,86 @@ int rd_write(int fd, char *address, int num_bytes){
 	if(!strncmp(fd_table[fd]->inode->type,"dir",3))
 		return -1; //This is a directory file
 
-
-	int bytes_written = 0;
-	int bytes_left = num_bytes;
-
+	int bytes_written = 0;								//For tracking *address
+	int bytes_left = num_bytes;							//For writting loops
+	int start_block;
 	struct Inode *inode = &disk->inode[fd];
-
-	//Write to first 8 block pointers
-	for(int i=0; i<8; i++){
+	
+	
+	//Blocks 0...7
+	start_block = (fd_table[fd]->write_pos/256) % 4168;
+	for(int i=start_block; i<8; i++){
 		//Check if block is allocated or not. If not, allocate it a block
-		if(inode->location[i] == NULL)
-			inode->location[i] = allocate_block();
-		//printk("Writting to inode.location[%d] at addr: %p\n", i, inode->location[i]);
-
-		//Calculate how much data to write
-		int tmp = 256;
-		if(bytes_left < 256) tmp = bytes_left;
+		if(inode->location[i] == NULL) inode->location[i] = allocate_block();
 
 		//Write data
-		write_to_block(inode, inode->location[i], address+(256*i), tmp);
+		printk("Writting to inode.location[%d] at addr: %p\n", i, inode->location[i]);
+		union Block *block = inode->location[i];
+		for(int j=0; (j<256) && (j<bytes_left); j++){
+			block->file.byte[j] = address[bytes_written];
 
-		//Update trackers
-		bytes_written += tmp;
-		bytes_left -= tmp;
+			bytes_written++;
+			fd_table[fd]->write_pos++;
 
-		//stop if done
-		if(bytes_left == 0){
-			printk("Bytes Written: %d\n", bytes_written);
-			printk("=================================\n");
-			return bytes_written;
 		}
+		bytes_left = num_bytes - bytes_written;
+
+		//Return if all data has been written
+		if(bytes_left <= 0) return bytes_written;
 	}
 
-	//Write to 9th single indirect block pointer
-	//Check if block is allocated or not. If not, allocate it a block
-	if(inode->location[8] == NULL)
-		inode->location[8] = allocate_block();
-	for(int i=0; i<64; i++){
-		//Check if block is allocated or not. If not, allocate it a block
-		if(inode->location[8]->ptr.loc[i] == NULL)
-			inode->location[8]->ptr.loc[i] = allocate_block();
-		//printk("Writting to inode.location[8]->ptr.loc[%d] at addr: %p\n", i, inode->location[8]->ptr.loc);
+	
 
-		//Calculate how much data to write
-		int tmp = 256;
-		if(bytes_left < 256) tmp = bytes_left;
+	//Blocks 8...71
+	if(inode->location[8] == NULL) inode->location[8] = allocate_block();
+	start_block = (fd_table[fd]->write_pos/256) % 4168;
+	for(int i=start_block-8; i<64; i++){
+		//Check if block is allocated or not. If not, allocate it a block
+		if(inode->location[8]->ptr.loc[i] == NULL) inode->location[8]->ptr.loc[i] = allocate_block();
 
 		//Write data
-		write_to_block(inode, inode->location[8]->ptr.loc[i], address+(2048)+(256*i), tmp);
-
-		//Update trackers
-		bytes_written += tmp;
-		bytes_left -= tmp;
-
-		//stop if done
-		if(bytes_left == 0){
-			printk("Bytes Written: %d\n", bytes_written);
-			printk("=================================\n");
-			return bytes_written;
+		union Block *block = inode->location[8]->ptr.loc[i];
+		for(int j=0; (j<256) && (j<bytes_left); j++){
+			block->file.byte[j] = address[bytes_written];
+			
+			bytes_written++;
+			fd_table[fd]->write_pos++;
 		}
+
+		bytes_left = num_bytes - bytes_written;
+		printk("Left: %d\n", bytes_left);
+
+		//Return if all data has been written
+		if(bytes_left <= 0) return bytes_written;
 	}
 	
-	//Write to 10th double indirect block poiner
-	//Check if block is allocated or not. If not, allocate it a block
-	if(inode->location[9] == NULL)
-		inode->location[9] = allocate_block();
-	for(int i=0; i<64; i++){
-		//Check if block is allocated or not. If not, allocate it a block
-		if(inode->location[9]->ptr.loc[i] == NULL)
-			inode->location[9]->ptr.loc[i] = allocate_block();
-		for(int j=0; j<64; j++){
-			if(inode->location[9]->ptr.loc[i]->ptr.loc[j] == NULL)
-				inode->location[9]->ptr.loc[i]->ptr.loc[j] = allocate_block();
-			//printk("Writting to inode.location[9]->ptr.loc[%d]->ptr.loc[%d] at addr: %p\n", i, j, 
-				//inode->location[9]->ptr.loc[i]->ptr.loc[j]);
 
-			//Calculate how much data to write
-			int tmp = 256;
-			if(bytes_left < 256) tmp = bytes_left;
+	return 0;
+	//Blocks 72...4167
+	start_block = fd_table[fd]->write_pos % 4168;
+	for(int i=(start_block-72)/64; i<64; i++){			//0-63
+
+		//Check if block is allocated or not. If not, allocate it a block
+		if(inode->location[9]->ptr.loc[i] == NULL) inode->location[9]->ptr.loc[i] = allocate_block();
+
+		for(int j=(start_block-72)%64; j<64; j++){		//0-63
+			//Check if block is allocated or not. If not, allocate it a block
+			if(inode->location[9]->ptr.loc[i]->ptr.loc[j] == NULL) inode->location[9]->ptr.loc[i]->ptr.loc[j] = allocate_block();
 
 			//Write data
-			write_to_block(inode, inode->location[9]->ptr.loc[i]->ptr.loc[j], address+18432+(i*j*256), tmp);
-
-			//Update trackers
-			bytes_written += tmp;
-			bytes_left -= tmp;
-
-			//stop if done
-			if(bytes_left == 0){
-				printk("Bytes Written: %d\n", bytes_written);
-				printk("=================================\n");
-				return bytes_written;
+			union Block *block = inode->location[8]->ptr.loc[i]->ptr.loc[j];
+			for(int k=0; (k<256) && (k<bytes_left); k++){
+				block->file.byte[k] = address[bytes_written];
+				bytes_written++;
+				bytes_left--;
+				fd_table[fd]->write_pos++;
 			}
 		}
 	}
 	
+	//Return if all data has been written
+	if(bytes_written == num_bytes) return bytes_written;
+
 	return -1;
 }
 
