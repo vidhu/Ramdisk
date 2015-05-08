@@ -16,7 +16,7 @@
 #define RD_UNLINK _IOR('G', 7, char *)
 #define RD_READDIR _IOWR('G', 8, struct Params) //param ds
 
-#define N 1067008
+#define N 10
 
 struct Params {
 	int fd;
@@ -37,17 +37,37 @@ int main(){
     int rdfd = ioctl(fd, RD_OPEN, "/file1");
 
     //Write data
-    char* msg = malloc(sizeof(char)*N);
-    memset(msg, '\0', sizeof(char)*N);
-    memset(msg, '1', (sizeof(char)*N)-1);
-
+    char* msg_write = malloc(sizeof(char)*N);
+    char* msg_write2 = malloc(sizeof(char)*N);
+    memset(msg_write, '\0', sizeof(char)*N);
+    memset(msg_write, '1', (sizeof(char)*N)-1);
+    memset(msg_write2, '\0', sizeof(char)*N);
+    memset(msg_write2, '2', (sizeof(char)*N)-1);
     struct Params p1 = {
     	.fd = rdfd,
-    	.addr = msg,
-    	.count = N
+    	.addr = msg_write,
+    	.count = 5
     };
     ioctl(fd, RD_WRITE, &p1);
+    p1.addr = msg_write2;
+    ioctl(fd, RD_WRITE, &p1);
     
+    //LSeek
+    struct Params p3 = {
+    	.fd = rdfd,
+    	.count = N-8
+    };
+    ioctl(fd, RD_LSEEK, &p3);
+
+    //Read data
+    char* msg_read = malloc(sizeof(char)*N);
+    memset(msg_read, '\0', sizeof(char)*N);
+    struct Params p2 = {
+    	.fd = rdfd,
+    	.addr = msg_read,
+    	.count = 8
+    };
+    ioctl(fd, RD_READ, &p2);
 
     //Close and Delete file
     ioctl(fd, RD_CLOSE, rdfd);

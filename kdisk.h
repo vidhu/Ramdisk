@@ -89,7 +89,7 @@ struct Ramdisk {
 };
 
 struct FileDesc {
-	int position;
+	int read_pos;
 	int write_pos;
 	struct Inode* inode;
 };
