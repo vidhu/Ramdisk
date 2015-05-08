@@ -6,6 +6,7 @@ all: user
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
 user: ioctl_test.c
 	gcc -std=gnu99 -m32 ioctl_test.c -o ioctl_test
+	gcc -std=gnu99 -m32 api.c test.c -o test
 
 .PHONY: in
 in: kdisk.ko
@@ -21,4 +22,5 @@ test:
 
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+	rm ioctl_test
 	$(shell rmmod kdisk)
